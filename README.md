@@ -93,11 +93,11 @@ Follow the steps below to set up your local development environment for this rep
 
 1. **Install UV**
 
-   Ensure that `uv is installed on your machine. Follow the documentation to do so for your specific OS.
+   Ensure that uv is installed on your machine. Follow the documentation for a standalone, separate from global python, installation for your specific OS [here](https://docs.astral.sh/uv/getting-started/installation/#installation-methods).
 
 1. **Install Git Bash**
 
-   Install git bash as your terminal interface. Avoid using Conda PowerShell directly for this project.
+   Install git bash as your terminal interface.  It is recommended to use VSCode as your editor.
 
 1. **Create a local Directory**
 
@@ -109,14 +109,14 @@ Follow the steps below to set up your local development environment for this rep
 
 1. **Clone the Repository**
 
-   Clone the repository using the SSH URL provided by the GitLab interface. Make sure you check out the main branch:
+   Clone the repository using the SSH URL provided by the GitHub interface. Make sure you check out the main branch:
 
-   - `git clone git@gitlab.example.com:your-group/your-repo.git`
+   - `git clone git@github.com:your-username/your-repo.git`
    - `git checkout main`
 
 1. **Create a Local Development Environment**
 
-   - Set up a local development environment using `uv venv` in the root of the directory.
+   - Set up a local development environment using `uv venv .<NAME>` in the root of the directory.
 
    - Source the virtual environment
    - Install packages from `uv.lock`: `uv sync`
