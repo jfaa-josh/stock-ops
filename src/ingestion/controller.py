@@ -37,6 +37,7 @@ if __name__ == "__main__":
 
     asyncio.run(run_streams())
 
+"""
 TODO: 
 - Install UV + poetry and create VENV so taht I can figure out how to
   path my code to run other scripts
@@ -44,5 +45,4 @@ TODO:
 - get controller part working correctly
 - move the inputs to a config file or soemthing
 - Make the database file rename each time created with a timestamp
-
-
+"""

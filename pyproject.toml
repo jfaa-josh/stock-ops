@@ -1,0 +1,83 @@
+[project]
+name = "stocks-ops"
+version = "0.1.0"
+description = "Deployable stock price data pipeline encluding MLOps for processing and analysis"
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [
+    {name = "Josh Fody", email = "josh@jfadvancedanalytics.com"}
+]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pandas",
+    "websockets",
+    "maturin",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "ruff",
+    "mypy",
+    "pre-commit",
+    "pytest",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+respect-gitignore = true
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "D",    # pydocstyle
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit (basic security issues)
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "TID",  # flake8-tidy-imports
+    "RUF",  # Ruff-specific rules
+]
+
+ignore = [
+    "D100",
+    "D101",
+    "D104",
+    "D107",
+    "D203",
+    "D213",
+]
+
+# Allow fix for all enabled rules (when `--fix`) is provided
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
