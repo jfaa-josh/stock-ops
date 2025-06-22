@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # fallback if .python-version isn't read
+          cache: "pip"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install just
+        run: |
+          curl -sL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+      - name: Install project dependencies
+        run: just install-dev
+
+      - name: Run format + type checks
+        run: just format
+
+      - name: Run tests
+        run: just test
+
+      - name: Generate structure.md
+        run: just generate-structure-doc
+
+      - name: Check for uncommitted changes in structure.md
+        run: |
+          git diff --exit-code docs/structure.md || (
+            echo "::error::docs/structure.md is out of sync. Run 'just generate-structure-doc'."
+            exit 1
+          )

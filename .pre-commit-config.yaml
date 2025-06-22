@@ -31,17 +31,11 @@ repos:
 
   - repo: local
     hooks:
-      - id: ruff-check
-        name: Run ruff check through uv
-        entry: uv run ruff check src tests
+      - id: ruff-auto-fix
+        name: Ruff auto-fix (check + format)
+        entry: bash -c 'uv run ruff format src tests && uv run ruff check src tests --fix --exit-zero'
         language: system
-        types: [python]
-
-      - id: ruff-format
-        name: Run ruff check through uv
-        entry: uv run ruff format src tests
-        language: system
-        types: [python]
+        pass_filenames: false
 
       - id: mypy
         name: Run mypy through uv

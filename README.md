@@ -53,13 +53,13 @@ Once development is complete and all tests pass, changes are submitted via a mer
 # Repository Files Overview
 Key repository files are described below:
 - root/
-    - **pyproject.toml:** a configuration file used by packaging tools, as well as other tools such as linters, type checkers, etc. including for `ruff` linting and formatting tool with settings as well as to ensure only relevant repository files are processed. Specify dependencies here.
+    - **pyproject.toml:** a configuration file used by packaging tools, as well as other tools such as linters, type checkers, etc. including for `ruff` linting and formatting tool with settings as well as to ensure only relevant repository files are processed. Specify dependencies here. Take place of setup.py in modern python.
     - **.python-version**: contains the project's default Python version. This file tells uv which Python version to use when creating the project's virtual environment.
     - **uv.lock**: a cross-platform lockfile that contains information about the exact resolved versions of your project's dependencies. It is managed by uv and should not be edited manually. This file should be checked into version control, allowing for consistent and reproducible installations across machines.
     - **.venv**: This folder contains your project's virtual environment, a Python environment that is isolated from the rest of your system. This is where uv will install your project's dependencies.
     🚨 - **.gitlab-ci.yml**: A configuration file that defines the CI/CD pipeline actions and executes `pre-commit` commands stored in the `.pre-commit-config.yaml` automatically when code is pushed or merged.
-    🚨 - **.pre-commit-config.yaml**: A configuration file for the `pre-commit` framework that defines a set of hooks to run automatically before each commit. These hooks are run locally, prior to pushing code remotely, to enforce code quality standards such as formatting, linting, and validation.
-    - **justfile**: File containing aliased commands for linting, formatting, fixing, and testing for ease of use. Similar to a Makefile.
+    - **.pre-commit-config.yaml**: A configuration file for the `pre-commit` framework that defines a set of hooks to run automatically before each commit. These hooks are run locally, prior to pushing code remotely, to enforce code quality standards such as formatting, linting, and validation.
+    - **justfile**: File containing aliased commands for linting, formatting, fixing, and testing for ease of use. Task automation; similar to a Makefile.
     -  **mypy.ini:** Configuration file for `mypy`, static type checker for Python that analyzes code to ensure type annotations are used correctly, to ensure only /src and /tests codes are processed.
     - **.gitattributes**: A git configuration file used to control how Git handles specific file types, including text normalization, diff behavior, and integration with tools like Git LFS for large file tracking.
     - **.gitignore**: A git configuration file used to exclude files from being synced to the repository in order to avoid bloat (i.e., local data or configuration files).
