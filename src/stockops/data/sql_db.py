@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Jun 15 17:18:28 2025
+"""Created on Sun Jun 15 17:18:28 2025
 
 @author: JoshFody
 """
-import sqlite3
+
 import datetime
 import os
-from typing import List, Optional, Any, Dict
+import sqlite3
+from typing import Any
+
 
 class SQLiteWriter:
     def __init__(self, db_dir: str = ".", table_name: str = "stream_data"):
@@ -54,25 +54,25 @@ class SQLiteReader:
         self.conn.row_factory = sqlite3.Row  # access rows as dict-like
         self.cursor = self.conn.cursor()
 
-    def fetch_all(self) -> List[Dict[str, Any]]:
+    def fetch_all(self) -> list[dict[str, Any]]:
         query = f'SELECT * FROM "{self.table_name}"'
         self.cursor.execute(query)
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def fetch_where(self, where_clause: str, params: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
+    def fetch_where(self, where_clause: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         query = f'SELECT * FROM "{self.table_name}" WHERE {where_clause}'
         self.cursor.execute(query, params or [])
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def fetch_columns(self, columns: List[str], limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def fetch_columns(self, columns: list[str], limit: int | None = None) -> list[dict[str, Any]]:
         col_str = ", ".join(f'"{col}"' for col in columns)
         query = f'SELECT {col_str} FROM "{self.table_name}"'
         if limit is not None:
-            query += f' LIMIT {limit}'
+            query += f" LIMIT {limit}"
         self.cursor.execute(query)
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def execute_raw_query(self, sql: str, params: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
+    def execute_raw_query(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         self.cursor.execute(sql, params or [])
         return [dict(row) for row in self.cursor.fetchall()]
 

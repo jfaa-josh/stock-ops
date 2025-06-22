@@ -1,10 +1,15 @@
-# -*- coding: utf-8 -*-
-"""
-Spyder Editor
+"""Spyder Editor
 
 This is a temporary script file.
 """
-import stock_streamer
 
-# Use your real API token instead of "demo"
-stock_streamer.start_stream("AAPL,MSFT", "demo")
+import asyncio
+import sys
+
+from stockops import run_data_pipeline
+
+if __name__ == "__main__":
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    asyncio.run(run_data_pipeline())
