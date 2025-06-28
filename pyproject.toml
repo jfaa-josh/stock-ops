@@ -20,8 +20,8 @@ dev = [
     "pre-commit",
     "ruff",
     "mypy",
-    "pre-commit",
     "pytest",
+    "pytest-cov",
 ]
 
 [tool.ruff]
