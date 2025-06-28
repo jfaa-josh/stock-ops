@@ -1,6 +1,3 @@
-# Set shell for Windows (PowerShell) or cross-platform logic if needed
-set shell := ["powershell", "-Command"]
-
 description:
   @echo 'This file is used to run all automated commands!'
 

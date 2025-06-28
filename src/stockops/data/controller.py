@@ -28,15 +28,3 @@ async def run_streams(duration: int | None = None):
         print("Caught Ctrl+C, shutting down...")
     finally:
         await manager.stop_all_streams()
-
-
-"""
-TODO:
-- Paths thing is not fully resolved.
-    I can import here, but if I run controller.py, it crashes on path.
-- Keep updating readme
-- get controller part working correctly
-- Set up the CI file, then merge this feature branch into main
-- move the inputs to a config file or soemthing
-- Make the database file rename each time created with a timestamp
-"""
