@@ -7,6 +7,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -14,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"  # fallback if .python-version isn't read
+          python-version-file: .python-version
           cache: "pip"
 
       - name: Install uv
@@ -23,6 +26,9 @@ jobs:
       - name: Install just
         run: |
           curl -sL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+      - name: Validate Python version match
+        run: ./scripts/validate_python_version.sh
 
       - name: Install project dependencies
         run: just install-dev

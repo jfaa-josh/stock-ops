@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     {name = "Josh Fody", email = "josh@jfadvancedanalytics.com"}
 ]
-requires-python = "{{PYTHON_VERSION}}"
+requires-python = "==3.13.*"
 dependencies = [
     "numpy",
     "matplotlib",
@@ -22,15 +22,16 @@ dev = [
     "mypy",
     "pytest",
     "pytest-cov",
+    "dotenv",
 ]
 
-[build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
+# [build-system]
+# requires = ["maturin>=1.0,<2.0"]
+# build-backend = "maturin"
 
 [tool.ruff]
 line-length = 120
-target-version = "{{PYTHON_VERSION}}"
+target-version = "py313"
 respect-gitignore = true
 
 [tool.ruff.lint]
@@ -57,7 +58,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "{{PYTHON_VERSION}}"
+python_version = "3.13"
 strict = true
 ignore_missing_imports = true
 disallow_untyped_calls = false

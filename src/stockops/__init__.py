@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 
 # Expose high-level interfaces for convenience
-from . import config, data, deploy, mlflow_utils, model, utils
+from . import config, data, deploy, mlflow_utils, model
 
 # Expose orchestrators or shared utilities directly
 from .data.controller import run_streams as run_data_pipeline

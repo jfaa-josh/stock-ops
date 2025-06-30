@@ -31,6 +31,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-python-version
+        name: Validate Python Version
+        entry: ./scripts/validate_python_version.sh
+        language: system
+        types: [toml]
+
+      - id: check-venv-sync
+        name: Check if .venv is synced
+        entry: ./scripts/check_venv_sync.sh
+        language: system
+        types: [toml]
+
       - id: ruff-auto-fix
         name: Ruff auto-fix (check + format)
         entry: bash -c 'uv run ruff format src tests && uv run ruff check src tests --fix --exit-zero'

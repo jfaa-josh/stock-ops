@@ -5,14 +5,18 @@
 
 import asyncio
 
-from stockops.config import DATA_DIR, QUOTE_URL, TRADE_URL
+from stockops.config import QUOTE_URL, RAW_HISTORICAL_DIR, RAW_REALTIME_DIR, TRADE_URL
 
 from .streaming.streaming_service import StreamManager
 
+RAW_REALTIME_DIR
+RAW_HISTORICAL_DIR
 DB_PATH = DATA_DIR / "stream_data.db"
+print(DB_PATH)
 
 
 async def run_streams(duration: int | None = None):
+    print("YO")
     manager = StreamManager(DB_PATH.__str__())
     manager.start_stream(TRADE_URL, ["SPY"], "trades")
     await asyncio.sleep(2)
