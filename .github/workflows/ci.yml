@@ -33,8 +33,8 @@ jobs:
       - name: Install project dependencies
         run: just install-dev
 
-      - name: Run format + type checks
-        run: just format
+      - name: Run format + type checks no fixes
+        run: just lint-ci
 
       - name: Run tests
         run: just test
