@@ -1,12 +1,12 @@
 [project]
 name = "stocks-ops"
 version = "0.1.0"
-description = "Deployable stock price data pipeline encluding MLOps for processing and analysis"
+description = "Deployable stock price data pipeline including MLOps for processing and analysis"
 readme = "README.md"
-requires-python = "==3.13.*"
 authors = [
     {name = "Josh Fody", email = "josh@jfadvancedanalytics.com"}
 ]
+requires-python = "{{PYTHON_VERSION}}"
 dependencies = [
     "numpy",
     "matplotlib",
@@ -24,9 +24,13 @@ dev = [
     "pytest-cov",
 ]
 
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "{{PYTHON_VERSION}}"
 respect-gitignore = true
 
 [tool.ruff.lint]
@@ -34,53 +38,31 @@ select = [
     "E",    # pycodestyle errors
     "F",    # pyflakes
     "I",    # isort
-    "N",    # pep8-naming
-    "UP",   # pyupgrade
     "B",    # flake8-bugbear
+    "UP",   # pyupgrade
     "C4",   # flake8-comprehensions
-    "TID",  # flake8-tidy-imports
-    "S",    # flake8-bandit (basic security issues)
-    "D",    # pydocstyle (docstring style, selectively ignored below)
-    "RUF",  # Ruff-specific rules
 ]
-
-ignore = [
-    "D100", # Missing docstring in public module
-    "D101", # Missing docstring in public class
-    "D102", # Missing docstring in public method
-    "D103", # Missing docstring in public function
-    "D104", # Missing docstring in public package
-    "D107", # Missing docstring in __init__
-    "D203", # 1 blank line required before class docstring (conflicts with D211)
-    "D213", # Multi-line docstring summary should start at the second line
-    "D415", # First line should end with a period/question mark/etc.
-]
-
-# Allow fix for all enabled rules (when `--fix`) is provided
+ignore = []
 fixable = ["ALL"]
 unfixable = []
-
-# Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
 
 [tool.ruff.format]
-# Like Black, use double quotes for strings.
 quote-style = "double"
-
-# Like Black, indent with spaces, rather than tabs.
 indent-style = "space"
-
-# Like Black, respect magic trailing commas.
 skip-magic-trailing-comma = false
-
-# Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
+
+[tool.mypy]
+python_version = "{{PYTHON_VERSION}}"
+strict = true
+ignore_missing_imports = true
+disallow_untyped_calls = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+show_error_codes = true
+pretty = true
