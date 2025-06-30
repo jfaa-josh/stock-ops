@@ -30,3 +30,9 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Optional: set entrypoint or CMD for runtime
 # CMD ["python", "-m", "stockops"]
+
+###
+ TODO:
+    docker run --env-file .env my-image   Something like this to load API_TOKEN and other secrets.  Allow user input.  Make sure can change!
+    NOTE!: ENV=production must be in the .env file created in the docker build context!!!
+###
