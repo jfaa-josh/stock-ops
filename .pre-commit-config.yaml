@@ -43,9 +43,15 @@ repos:
         language: system
         types: [toml]
 
-      - id: ruff-auto-fix
-        name: Ruff auto-fix (check + format)
-        entry: bash -c 'uv run ruff format src tests && uv run ruff check src tests --fix --exit-zero'
+      - id: ruff-format
+        name: Ruff format
+        entry: bash -c 'uv run ruff format src tests'
+        language: system
+        pass_filenames: false
+
+      - id: ruff-check-fix
+        name: Ruff check and fix for pre-commit
+        entry: bash -c 'uv run ruff check src tests --fix'
         language: system
         pass_filenames: false
 

@@ -8,20 +8,14 @@ install-dev:
     chmod +x scripts/install-dev.sh
     ./scripts/install-dev.sh
 
-# Run all key checks (including types)
-format: format-code mypy
-
-# Only fix code formatting and linting (not types)
-format-code: ruff-check-fix ruff-format
+# Run all key checks (including types), not fixing any issues (for ci only)
+lint-ci: ruff-format ruff-check mypy
 
 ruff-format:
     uv run ruff format src tests
 
 ruff-check:
     uv run ruff check src tests
-
-ruff-check-fix:
-    uv run ruff check src tests --fix
 
 mypy:
     uv run mypy
