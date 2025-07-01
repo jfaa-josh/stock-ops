@@ -7,4 +7,4 @@ if __name__ == "__main__":
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-    asyncio.run(run_data_pipeline(10, ["SPY"]))
+    asyncio.run(run_data_pipeline(120, ["SPY"]))

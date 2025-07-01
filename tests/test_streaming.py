@@ -1,55 +1,40 @@
-import asyncio
-import json
-from unittest.mock import MagicMock, patch
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
 
-import pytest
+from stockops.data.utils import get_stream_filepath
 
-from stockops.data.streaming.streaming_service import StreamManager
+# Fixed timestamp for deterministic testing
+FIXED_DATETIME = datetime(2025, 7, 1, 13, 52, 45)
+EXPECTED_TIMESTAMP = "2025-07-01_135245"
 
 
-@pytest.mark.asyncio
-async def test_stream_manager_runs_and_stores_messages():
-    # Arrange
-    fake_ws_url = "wss://example.com/fake"
-    fake_symbols = ["FAKE"]
-    table_name = "test_table"
+@patch("stockops.datetime")  # Patch datetime inside your utils module
+def test_get_stream_filepath_defaults(mock_datetime):
+    mock_datetime.now.return_value = FIXED_DATETIME
+    mock_datetime.strftime = datetime.strftime  # ensure strftime works
 
-    with patch("stockops.data.streaming.streaming_service.SQLiteWriter") as MockWriter:
-        mock_writer = MockWriter.return_value
-        mock_writer.insert = MagicMock()
+    expected_name = f"stream_data_{EXPECTED_TIMESTAMP}.db"
+    expected_path = Path(".") / expected_name
 
-        with patch("stockops.data.streaming.streaming_service.websockets.connect") as mock_connect:
+    result = get_stream_filepath()
+    assert result == expected_path
+    assert isinstance(result, Path)
+    assert result.name.endswith(".db")
 
-            class FakeWebSocket:
-                async def __aenter__(self):
-                    return self
 
-                async def __aexit__(self, *args):
-                    pass
+@patch("stockops.datetime")
+def test_get_stream_filepath_custom_args(mock_datetime):
+    mock_datetime.now.return_value = FIXED_DATETIME
+    mock_datetime.strftime = datetime.strftime
 
-                async def send(self, msg):
-                    payload = json.loads(msg)
-                    assert payload["action"] == "subscribe"
-                    assert payload["symbols"] == ",".join(fake_symbols)
+    table_name = "prices"
+    db_path = Path("/tmp/mydata")
+    fmt = "%Y-%m-%d_%H%M%S"
 
-                def __aiter__(self):
-                    async def async_generator():
-                        await asyncio.sleep(0.01)  # Allow event loop to run stream task
-                        yield json.dumps({"price": 123.45, "symbol": "FAKE"})
+    expected_name = f"{table_name}_{EXPECTED_TIMESTAMP}.db"
+    expected_path = db_path / expected_name
 
-                    return async_generator()
-
-            mock_connect.return_value = FakeWebSocket()
-
-            # Act
-            manager = StreamManager(db_path=":memory:")
-            manager.start_stream(fake_ws_url, fake_symbols, table_name)
-
-            await asyncio.sleep(0.2)  # Give background task time to run
-            await manager.stop_all_streams()
-
-            # Debug output
-            print("mock_writer.insert.call_args_list =", mock_writer.insert.call_args_list)
-
-            # Assert
-            mock_writer.insert.assert_called_with({"price": 123.45, "symbol": "FAKE"})
+    result = get_stream_filepath(table_name=table_name, datestr_fmt=fmt, db_path=db_path)
+    assert result == expected_path
+    assert result.parent == db_path

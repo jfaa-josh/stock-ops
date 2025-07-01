@@ -1,15 +1,21 @@
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 
-from stockops.config import DATA_DB_DATESTR, RAW_STREAMING_DIR
 
+def get_stream_filepath(
+    table_name: str = "stream_data", datestr_fmt: str = "%Y-%m-%d_%H%M%S", db_path: Path = Path(".")
+) -> Path:
+    """
+    Generate a file path for a SQLite stream database with a timestamp.
 
-def get_streaming_db_path(db_date: date | None = None) -> Path:
+    Args:
+        table_name (str): Base name of the table or data source.
+        datestr_fmt (str): Datetime format string for timestamp.
+        db_path (Path): Directory in which to place the file.
+
+    Returns:
+        Path: Full path to the generated database file.
     """
-    Returns the path to the .db file for the given date.
-    If no date is given, uses today's date.
-    """
-    if db_date is None:
-        db_date = date.today()
-    db_name = db_date.strftime(DATA_DB_DATESTR) + ".db"
-    return RAW_STREAMING_DIR / db_name
+    timestamp = datetime.now().strftime(datestr_fmt)
+    db_filename = f"{table_name}_{timestamp}.db"
+    return db_path / db_filename
