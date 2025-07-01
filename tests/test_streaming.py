@@ -42,12 +42,13 @@ async def test_stream_manager_runs_and_stores_messages():
 
             mock_connect.return_value = FakeWebSocket()
 
-            # Act
-            manager = StreamManager(db_path=":memory:")  # path unused due to mocking
-            manager.start_stream(fake_ws_url, fake_symbols, table_name)
+            with patch("asyncio.sleep", return_value=None):
+                # Act
+                manager = StreamManager(db_path=":memory:")  # path unused due to mocking
+                manager.start_stream(fake_ws_url, fake_symbols, table_name)
 
-            await asyncio.sleep(0.2)
-            await manager.stop_all_streams()
+                await asyncio.sleep(0.2)
+                await manager.stop_all_streams()
 
-            # Assert
-            mock_writer.insert.assert_called_with({"price": 123.45, "symbol": "FAKE"})
+                # Assert
+                mock_writer.insert.assert_called_with({"price": 123.45, "symbol": "FAKE"})
