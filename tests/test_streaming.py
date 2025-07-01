@@ -14,12 +14,10 @@ async def test_stream_manager_runs_and_stores_messages():
     fake_symbols = ["FAKE"]
     table_name = "test_table"
 
-    # Patch the SQLiteWriter so it doesn't hit the file system
     with patch("stockops.data.streaming.streaming_service.SQLiteWriter") as MockWriter:
         mock_writer = MockWriter.return_value
         mock_writer.insert = MagicMock()
 
-        # Patch websockets.connect to simulate server behavior
         with patch("stockops.data.streaming.streaming_service.websockets.connect") as mock_connect:
 
             class FakeWebSocket:
@@ -36,19 +34,22 @@ async def test_stream_manager_runs_and_stores_messages():
 
                 def __aiter__(self):
                     async def async_generator():
+                        await asyncio.sleep(0.01)  # Allow event loop to run stream task
                         yield json.dumps({"price": 123.45, "symbol": "FAKE"})
 
                     return async_generator()
 
             mock_connect.return_value = FakeWebSocket()
 
-            with patch("stockops.data.streaming.streaming_service.asyncio.sleep", return_value=None):
-                # Act
-                manager = StreamManager(db_path=":memory:")
-                manager.start_stream(fake_ws_url, fake_symbols, table_name)
+            # Act
+            manager = StreamManager(db_path=":memory:")
+            manager.start_stream(fake_ws_url, fake_symbols, table_name)
 
-                await asyncio.sleep(0.2)
-                await manager.stop_all_streams()
+            await asyncio.sleep(0.2)  # Give background task time to run
+            await manager.stop_all_streams()
 
-                # Assert
-                mock_writer.insert.assert_called_with({"price": 123.45, "symbol": "FAKE"})
+            # Debug output
+            print("mock_writer.insert.call_args_list =", mock_writer.insert.call_args_list)
+
+            # Assert
+            mock_writer.insert.assert_called_with({"price": 123.45, "symbol": "FAKE"})
