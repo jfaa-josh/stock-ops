@@ -36,36 +36,57 @@ class SQLiteWriter:
         self.cursor.execute(insert_stmt, values)
         self.conn.commit()
 
+    def insert_metadata(self, metadata: dict):
+        meta_table = "stream_metadata"
+        columns = [f'"{k}" TEXT' for k in metadata.keys()]
+        col_defs = ", ".join(columns)
+        create_stmt = f'CREATE TABLE IF NOT EXISTS "{meta_table}" ({col_defs})'
+        self.cursor.execute(create_stmt)
+
+        keys = list(metadata.keys())
+        values = [str(metadata[k]) for k in keys]
+        placeholders = ", ".join("?" for _ in keys)
+        column_names = ", ".join(f'"{k}"' for k in keys)
+        insert_stmt = f'INSERT INTO "{meta_table}" ({column_names}) VALUES ({placeholders})'
+        self.cursor.execute(insert_stmt, values)
+        self.conn.commit()
+
     def close(self):
         self.conn.commit()
         self.conn.close()
 
 
 class SQLiteReader:
-    def __init__(self, db_path: str, table_name: str):
+    def __init__(self, db_path: Path):
         self.db_path = db_path
-        self.table_name = table_name
         self.conn = sqlite3.connect(db_path)
-        self.conn.row_factory = sqlite3.Row  # access rows as dict-like
+        self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
 
-    def fetch_all(self) -> list[dict[str, Any]]:
-        query = f'SELECT * FROM "{self.table_name}"'
+    def list_tables(self) -> list[str]:
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+        return [row["name"] for row in self.cursor.fetchall()]
+
+    def fetch_all(self, table_name: str) -> list[dict[str, Any]]:
+        query = f'SELECT * FROM "{table_name}"'
         self.cursor.execute(query)
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def fetch_where(self, where_clause: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
-        query = f'SELECT * FROM "{self.table_name}" WHERE {where_clause}'
+    def fetch_where(self, table_name: str, where_clause: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
+        query = f'SELECT * FROM "{table_name}" WHERE {where_clause}'
         self.cursor.execute(query, params or [])
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def fetch_columns(self, columns: list[str], limit: int | None = None) -> list[dict[str, Any]]:
+    def fetch_columns(self, table_name: str, columns: list[str], limit: int | None = None) -> list[dict[str, Any]]:
         col_str = ", ".join(f'"{col}"' for col in columns)
-        query = f'SELECT {col_str} FROM "{self.table_name}"'
+        query = f'SELECT {col_str} FROM "{table_name}"'
         if limit is not None:
             query += f" LIMIT {limit}"
         self.cursor.execute(query)
         return [dict(row) for row in self.cursor.fetchall()]
+
+    def fetch_metadata(self) -> list[dict[str, Any]]:
+        return self.fetch_all("stream_metadata")
 
     def execute_raw_query(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         self.cursor.execute(sql, params or [])
