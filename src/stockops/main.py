@@ -1,8 +1,3 @@
-"""Spyder Editor
-
-This is a temporary script file.
-"""
-
 import asyncio
 import sys
 
