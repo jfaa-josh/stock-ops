@@ -9,7 +9,7 @@ FIXED_DATETIME = datetime(2025, 7, 1, 13, 52, 45)
 EXPECTED_TIMESTAMP = "2025-07-01_135245"
 
 
-@patch("stockops.datetime")  # Patch datetime inside your utils module
+@patch("stockops.utils.datetime")  # Patch datetime inside your utils module
 def test_get_stream_filepath_defaults(mock_datetime):
     mock_datetime.now.return_value = FIXED_DATETIME
     mock_datetime.strftime = datetime.strftime  # ensure strftime works
@@ -23,7 +23,7 @@ def test_get_stream_filepath_defaults(mock_datetime):
     assert result.name.endswith(".db")
 
 
-@patch("stockops.datetime")
+@patch("stockops.utils.datetime")
 def test_get_stream_filepath_custom_args(mock_datetime):
     mock_datetime.now.return_value = FIXED_DATETIME
     mock_datetime.strftime = datetime.strftime
