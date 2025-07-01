@@ -10,4 +10,7 @@ if __name__ == "__main__":
     def data_pipeline(duration: int = 120, tickers: list[str] | None = None):
         asyncio.run(run_data_pipeline(duration, tickers))
 
+    def read_streaming_data():
+        pass
+
     # data_pipeline(120, ["SPY"])
