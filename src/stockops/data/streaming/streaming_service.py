@@ -1,22 +1,22 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Jun 15 15:35:25 2025
+"""Created on Sun Jun 15 15:35:25 2025
 
 @author: JoshFody
 """
+
 import asyncio
-import websockets
 import json
-from typing import List
-from sql_db import SQLiteWriter
+
+import websockets
+
+from stockops.data.sql_db import SQLiteWriter
 
 
 class StreamManager:
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.tasks = []
+        self.tasks: list[asyncio.Task] = []
 
-    async def _stream_data(self, ws_url: str, symbols: List[str], table_name: str):
+    async def _stream_data(self, ws_url: str, symbols: list[str], table_name: str):
         writer = SQLiteWriter(self.db_path, table_name)
 
         try:
@@ -24,10 +24,7 @@ class StreamManager:
                 try:
                     print(f"Connecting to {ws_url}")
                     async with websockets.connect(ws_url) as websocket:
-                        subscribe_msg = {
-                            "action": "subscribe",
-                            "symbols": ",".join(symbols)
-                        }
+                        subscribe_msg = {"action": "subscribe", "symbols": ",".join(symbols)}
                         await websocket.send(json.dumps(subscribe_msg))
                         print(f"Subscribed to {symbols} on {ws_url}")
 
@@ -37,7 +34,12 @@ class StreamManager:
                                 writer.insert(data)
                                 print(f"[{table_name}] {data}")
                             except json.JSONDecodeError:
-                                print(f"[{table_name}] Warning: Non-JSON message: {message}")
+                                # 🔧 Safely handle bytes or string message
+                                if isinstance(message, bytes):
+                                    safe_message = message.decode("utf-8", errors="replace")
+                                else:
+                                    safe_message = message
+                                print(f"[{table_name}] Warning: Non-JSON message: {safe_message}")
                             except Exception as e:
                                 print(f"[{table_name}] Error: {e}")
                 except Exception as e:
@@ -48,7 +50,7 @@ class StreamManager:
         finally:
             writer.close()
 
-    def start_stream(self, ws_url: str, symbols: List[str], table_name: str):
+    def start_stream(self, ws_url: str, symbols: list[str], table_name: str):
         task = asyncio.create_task(self._stream_data(ws_url, symbols, table_name))
         self.tasks.append(task)
 
@@ -61,5 +63,3 @@ class StreamManager:
 
     def clear_tasks(self):
         self.tasks = []
-
-

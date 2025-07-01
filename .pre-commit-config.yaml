@@ -1,0 +1,62 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=512000"]  # 500MB max file size
+      - id: check-merge-conflict  # always check for merge conflicts
+      - id: check-toml
+      - id: mixed-line-ending
+        args: ["--fix=lf"]  # unix style line endings
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+  # YAML validation
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.37.0
+    hooks:
+      - id: yamllint
+        args:
+          - --config-data
+          - |
+            extends: default
+            rules:
+              line-length:
+                max: 120
+                level: warning
+              document-start:
+                present: false
+
+  - repo: local
+    hooks:
+      - id: validate-python-version
+        name: Validate Python Version
+        entry: ./scripts/validate_python_version.sh
+        language: system
+        types: [toml]
+
+      - id: check-venv-sync
+        name: Check if .venv is synced
+        entry: ./scripts/check_venv_sync.sh
+        language: system
+        types: [toml]
+
+      - id: ruff-format
+        name: Ruff format
+        entry: bash -c 'uv run ruff format src tests'
+        language: system
+        pass_filenames: false
+
+      - id: ruff-check-fix
+        name: Ruff check and fix for pre-commit
+        entry: bash -c 'uv run ruff check src tests --fix'
+        language: system
+        pass_filenames: false
+
+      - id: mypy-check
+        name: Run mypy through uv
+        entry: uv run mypy
+        language: system
+        pass_filenames: false

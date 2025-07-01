@@ -1,0 +1,73 @@
+[project]
+name = "stocks-ops"
+version = "0.1.0"
+description = "Deployable stock price data pipeline including MLOps for processing and analysis"
+readme = "README.md"
+authors = [
+    {name = "Josh Fody", email = "josh@jfadvancedanalytics.com"}
+]
+requires-python = "==3.13.*"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pandas",
+    "websockets",
+    "maturin",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "dotenv",
+]
+
+# [build-system]
+# requires = ["maturin>=1.0,<2.0"]
+# build-backend = "maturin"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+respect-gitignore = true
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
+]
+ignore = []
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+warn_unused_ignores = true
+strict_equality = true
+show_error_codes = true
+pretty = true
+files = ["src", "tests"]
+mypy_path = ["src", "tests"]
+# Optionally tighten later:
+# disallow_untyped_defs = true
+# check_untyped_defs = true
+# strict = true

@@ -16,7 +16,7 @@ __pycache__/
 *.dylib
 
 # ======================
-# Conda & Virtual Envs
+# Virtual Envs
 # ======================
 .venv/
 venv/
@@ -26,10 +26,10 @@ env.bak/
 *.conda
 *.venv
 *.env
-
-# If Conda drops environment-related files
 conda-meta/
 *.yaml.lock
+*.lock
+!uv.lock
 
 # =================
 # Package Management
@@ -136,7 +136,6 @@ MANIFEST
 # ====================
 *.tmp
 *.temp
-*.lock
 *.pid
 *.run
 *.bak
