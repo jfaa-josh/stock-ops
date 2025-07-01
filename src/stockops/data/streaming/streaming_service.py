@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import websockets
@@ -15,14 +16,28 @@ from stockops.data.sql_db import SQLiteWriter
 class StreamManager:
     def __init__(self):
         self.tasks: list[asyncio.Task] = []
-        self.db_filepaths: list[Path] = []
 
-    async def _stream_data(self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str):
+    async def _stream_data(
+        self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str, duration: int
+    ):
         writer = SQLiteWriter(db_filepath, table_name)
         expected_keys = set(exp_data)  # Keys to filter streaming data for expected structure
 
+        metadata = {
+            "stream_type": table_name,
+            "tickers": ",".join(symbols),
+            "expected_keys": ",".join(exp_data.keys()),
+            "field_descriptions": json.dumps(exp_data),  # <-- this line is new
+            "start_time_utc": datetime.now(UTC).isoformat(),
+            "ws_url": ws_url,
+            "db_path": str(db_filepath),
+            "duration_sec": str(duration),
+        }
+        writer.insert_metadata(metadata)
+
         try:
-            while True:
+            end_time = asyncio.get_event_loop().time() + duration
+            while asyncio.get_event_loop().time() < end_time:
                 try:
                     print(f"Connecting to {ws_url}")
                     async with websockets.connect(ws_url) as websocket:
@@ -64,10 +79,11 @@ class StreamManager:
         finally:
             writer.close()
 
-    def start_stream(self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str):
-        task = asyncio.create_task(self._stream_data(ws_url, exp_data, symbols, db_filepath, table_name))
+    def start_stream(
+        self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str, duration: int
+    ):
+        task = asyncio.create_task(self._stream_data(ws_url, exp_data, symbols, db_filepath, table_name, duration))
         self.tasks.append(task)
-        self.db_filepaths.append(db_filepath)
 
     async def stop_all_streams(self):
         print("Stopping all streams...")

@@ -21,22 +21,13 @@ from .utils import get_stream_filepath
 async def run_streams(duration: int = 5, tickers: list[str] | None = None):
     if tickers is None:
         tickers = ["SPY"]
+
     stream_manager = StreamManager()
-    stream_manager.start_stream(
-        TRADE_URL,
-        TRADE_EXPECTED_DICT,
-        tickers,
-        get_stream_filepath("trades", DATA_DB_DATESTR, RAW_STREAMING_DIR),
-        "trades",
-    )
-    await asyncio.sleep(2)
-    stream_manager.start_stream(
-        QUOTE_URL,
-        QUOTE_EXPECTED_DICT,
-        tickers,
-        get_stream_filepath("quotes", DATA_DB_DATESTR, RAW_STREAMING_DIR),
-        "quotes",
-    )
+    db_filepath = get_stream_filepath("streaming", DATA_DB_DATESTR, RAW_STREAMING_DIR)
+
+    stream_manager.start_stream(TRADE_URL, TRADE_EXPECTED_DICT, tickers, db_filepath, "trades", duration)
+
+    stream_manager.start_stream(QUOTE_URL, QUOTE_EXPECTED_DICT, tickers, db_filepath, "quotes", duration)
 
     try:
         await asyncio.sleep(duration)
