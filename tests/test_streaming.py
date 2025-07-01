@@ -42,9 +42,9 @@ async def test_stream_manager_runs_and_stores_messages():
 
             mock_connect.return_value = FakeWebSocket()
 
-            with patch("asyncio.sleep", return_value=None):
+            with patch("stockops.data.streaming.streaming_service.asyncio.sleep", return_value=None):
                 # Act
-                manager = StreamManager(db_path=":memory:")  # path unused due to mocking
+                manager = StreamManager(db_path=":memory:")
                 manager.start_stream(fake_ws_url, fake_symbols, table_name)
 
                 await asyncio.sleep(0.2)
