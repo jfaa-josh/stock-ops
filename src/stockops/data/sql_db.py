@@ -3,23 +3,18 @@
 @author: JoshFody
 """
 
-import datetime
-import os
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 
 class SQLiteWriter:
-    def __init__(self, db_dir: str = ".", table_name: str = "stream_data"):
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        db_filename = f"{table_name}_{timestamp}.db"
-        db_path = os.path.join(db_dir, db_filename)
-
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+    def __init__(self, db_filepath: Path, table_name: str):
+        self.conn = sqlite3.connect(db_filepath, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.table_name = table_name
         self.schema_initialized = False
-        self.db_path = db_path  # store for reference if needed
+        self.db_filepath = db_filepath  # store for reference if needed
 
     def initialize_schema(self, data: dict):
         columns = [f'"{k}" TEXT' for k in data.keys()]

@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+from pathlib import Path
 
 import websockets
 
@@ -12,12 +13,13 @@ from stockops.data.sql_db import SQLiteWriter
 
 
 class StreamManager:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self):
         self.tasks: list[asyncio.Task] = []
+        self.db_filepaths: list[Path] = []
 
-    async def _stream_data(self, ws_url: str, symbols: list[str], table_name: str):
-        writer = SQLiteWriter(self.db_path, table_name)
+    async def _stream_data(self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str):
+        writer = SQLiteWriter(db_filepath, table_name)
+        expected_keys = set(exp_data)  # Keys to filter streaming data for expected structure
 
         try:
             while True:
@@ -31,28 +33,41 @@ class StreamManager:
                         async for message in websocket:
                             try:
                                 data = json.loads(message)
-                                writer.insert(data)
-                                print(f"[{table_name}] {data}")
-                            except json.JSONDecodeError:
-                                # 🔧 Safely handle bytes or string message
-                                if isinstance(message, bytes):
-                                    safe_message = message.decode("utf-8", errors="replace")
+
+                                if "status_code" in data and "message" in data:
+                                    print(f"[{table_name}] Handshake: {data}")
+                                    continue
+
+                                if expected_keys.issubset(data):  # Store only if data contains expected keys
+                                    writer.insert(data)
+                                    print(f"[{table_name}] {data}")
                                 else:
-                                    safe_message = message
+                                    print(f"[{table_name}] Ignored non-trade message: {data}")
+
+                            except json.JSONDecodeError:
+                                safe_message = (
+                                    message.decode("utf-8", errors="replace")
+                                    if isinstance(message, bytes)
+                                    else str(message)
+                                )
                                 print(f"[{table_name}] Warning: Non-JSON message: {safe_message}")
+
                             except Exception as e:
                                 print(f"[{table_name}] Error: {e}")
+
                 except Exception as e:
                     print(f"[{table_name}] Connection error: {e} — retrying in 5 seconds.")
                     await asyncio.sleep(5)
+
         except asyncio.CancelledError:
             print(f"[{table_name}] Stream cancelled.")
         finally:
             writer.close()
 
-    def start_stream(self, ws_url: str, symbols: list[str], table_name: str):
-        task = asyncio.create_task(self._stream_data(ws_url, symbols, table_name))
+    def start_stream(self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str):
+        task = asyncio.create_task(self._stream_data(ws_url, exp_data, symbols, db_filepath, table_name))
         self.tasks.append(task)
+        self.db_filepaths.append(db_filepath)
 
     async def stop_all_streams(self):
         print("Stopping all streams...")
