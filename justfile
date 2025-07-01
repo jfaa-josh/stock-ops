@@ -23,8 +23,8 @@ mypy:
 test:
     uv run pytest
 
-# Generate a repo structure documentation file
 generate-structure-doc:
+  mkdir -p docs
   echo "# Repository Structure" > docs/structure.md
   echo "" >> docs/structure.md
 
