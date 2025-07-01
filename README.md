@@ -53,14 +53,16 @@ Once development is complete and all tests pass, changes are submitted via a mer
 # Repository Files Overview
 Key repository files are described below:
 - root/
-    - **pyproject.toml:** Configuration file for `ruff` linting and formatting tool with settings as well as to ensure only relevant repository files are processed. This is the main common config for all tools and package additions and should be the first place to start.
-    - **mypy.ini:** Configuration file for `mypy`, static type checker for Python that analyzes code to ensure type annotations are used correctly, to ensure only /src and /tests codes are processed.
+    - **pyproject.toml:** a configuration file used by packaging tools, as well as other tools such as linters, type checkers, etc. including for `ruff` linting and formatting tool with settings as well as to ensure only relevant repository files are processed. Specify dependencies here. Take place of setup.py in modern python.
+    - **.python-version**: contains the project's default Python version. This file tells uv which Python version to use when creating the project's virtual environment.
+    - **uv.lock**: a cross-platform lockfile that contains information about the exact resolved versions of your project's dependencies. It is managed by uv and should not be edited manually. This file should be checked into version control, allowing for consistent and reproducible installations across machines.
+    - **.venv**: This folder contains your project's virtual environment, a Python environment that is isolated from the rest of your system. This is where uv will install your project's dependencies.
+    🚨 - **.gitlab-ci.yml**: A configuration file that defines the CI/CD pipeline actions and executes `pre-commit` commands stored in the `.pre-commit-config.yaml` automatically when code is pushed or merged.
+    - **.pre-commit-config.yaml**: A configuration file for the `pre-commit` framework that defines a set of hooks to run automatically before each commit. These hooks are run locally, prior to pushing code remotely, to enforce code quality standards such as formatting, linting, and validation.
+    - **justfile**: File containing aliased commands for linting, formatting, fixing, and testing for ease of use. Task automation; similar to a Makefile.
+    -  **mypy.ini:** Configuration file for `mypy`, static type checker for Python that analyzes code to ensure type annotations are used correctly, to ensure only /src and /tests codes are processed.
     - **.gitattributes**: A git configuration file used to control how Git handles specific file types, including text normalization, diff behavior, and integration with tools like Git LFS for large file tracking.
     - **.gitignore**: A git configuration file used to exclude files from being synced to the repository in order to avoid bloat (i.e., local data or configuration files).
-    - **.gitlab-ci.yml**: A configuration file that defines the CI/CD pipeline actions and executes `pre-commit` commands stored in the `.pre-commit-config.yaml` automatically when code is pushed or merged.
-    - **.pre-commit-config.yaml**: A configuration file for the `pre-commit` framework that defines a set of hooks to run automatically before each commit. These hooks are run locally, prior to pushing code remotely, to enforce code quality standards such as formatting, linting, and validation.
-    - **uv.lock**: Package lock file that contains all packages required in the repository based on resolving main packages in `pyproject.toml`
-    - **justfile**: File containing aliased commands for linting, formatting, fixing, and testing for ease of use.
     - **README.md**: Markdown for this readme file.
 - data/
     - git_lfs/
@@ -70,16 +72,13 @@ Key repository files are described below:
         - test/
         - train/
         - validate/
-- misc/
-    - Miscellaneous repository and project files
 - models/
     - 🚨 FUTURE 🚨
 - src/
     - Python source code.
 - tests/
-    - src/
-        - Scripts to run in CI using Pytest-cov for source code validation:
-            - `test_script.py`: 🚨 Template code tests 🚨
+    - Scripts to run in CI using Pytest-cov for source code validation:
+    - `test_script.py`: 🚨 Template code tests 🚨
 
 # Project-Specific Details
 
@@ -93,11 +92,11 @@ Follow the steps below to set up your local development environment for this rep
 
 1. **Install UV**
 
-   Ensure that `uv is installed on your machine. Follow the documentation to do so for your specific OS.
+   Ensure that uv is installed on your machine. Follow the documentation for a standalone, separate from global python, installation for your specific OS [here](https://docs.astral.sh/uv/getting-started/installation/#installation-methods).
 
 1. **Install Git Bash**
 
-   Install git bash as your terminal interface. Avoid using Conda PowerShell directly for this project.
+   Install git bash as your terminal interface.  It is recommended to use VSCode as your editor.
 
 1. **Create a local Directory**
 
@@ -109,17 +108,17 @@ Follow the steps below to set up your local development environment for this rep
 
 1. **Clone the Repository**
 
-   Clone the repository using the SSH URL provided by the GitLab interface. Make sure you check out the main branch:
+   Clone the repository using the SSH URL provided by the GitHub interface. Make sure you check out the main branch:
 
-   - `git clone git@gitlab.example.com:your-group/your-repo.git`
+   - `git clone git@github.com:your-username/your-repo.git`
    - `git checkout main`
 
 1. **Create a Local Development Environment**
 
-   - Set up a local development environment using `uv venv` in the root of the directory.
+   - Set up a local development environment using `uv venv .venv` in the root of the directory. The name `venv` is industry standard for the environment, and easy to .gitignore and autodiscover.
 
    - Source the virtual environment
-   - Install packages from `uv.lock`: `uv sync`
+   - Install packages from `uv.lock` by running: `uv sync`
 
 1. **Initialize Pre-Commit (One-Time Setup)**
 

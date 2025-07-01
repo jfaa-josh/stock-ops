@@ -1,0 +1,53 @@
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Ignore environments
+.venv/
+.env
+*.env
+
+# Ignore testing artifacts
+.coverage
+.cache/
+pytest_cache/
+htmlcov/
+.tox/
+
+# Ignore VSCode and other IDE settings
+.vscode/
+.idea/
+
+# Ignore DVC cache (if used)
+.dvc/
+.dvc/cache/
+*.dvc
+
+# Ignore Git and GitHub artifacts
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Ignore CI/CD outputs or docs cache
+*.log
+docs/_build/
+
+# Ignore large data or generated files
+data/
+!data/schema/        # include schema if needed
+models/
+!models/schema/      # include schema if needed
+
+# Ignore compiled Rust/Python extensions (if using maturin)
+*.so
+*.dylib
+*.dll
+target/
+
+# Ignore Docker artifacts
+Dockerfile*
+.dockerignore
