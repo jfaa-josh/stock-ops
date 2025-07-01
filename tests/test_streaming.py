@@ -20,7 +20,8 @@ async def test_stream_manager_runs_and_stores_messages():
         mock_writer.insert = MagicMock()
 
         # Patch websockets.connect to simulate server behavior
-        async def fake_websocket_handler(*args, **kwargs):
+        with patch("stockops.data.streaming.streaming_service.websockets.connect") as mock_connect:
+
             class FakeWebSocket:
                 async def __aenter__(self):
                     return self
@@ -29,22 +30,22 @@ async def test_stream_manager_runs_and_stores_messages():
                     pass
 
                 async def send(self, msg):
-                    # Validate the subscribe message
                     payload = json.loads(msg)
                     assert payload["action"] == "subscribe"
-                    assert payload["symbols"] == "FAKE"
+                    assert payload["symbols"] == ",".join(fake_symbols)
 
-                async def __aiter__(self):
-                    yield json.dumps({"price": 123.45, "symbol": "FAKE"})
+                def __aiter__(self):
+                    async def async_generator():
+                        yield json.dumps({"price": 123.45, "symbol": "FAKE"})
 
-            return FakeWebSocket()
+                    return async_generator()
 
-        with patch("stockops.data.streaming.streaming_service.websockets.connect", new=fake_websocket_handler):
+            mock_connect.return_value = FakeWebSocket()
+
             # Act
             manager = StreamManager(db_path=":memory:")  # path unused due to mocking
             manager.start_stream(fake_ws_url, fake_symbols, table_name)
 
-            # Let it run for a short duration
             await asyncio.sleep(0.2)
             await manager.stop_all_streams()
 
