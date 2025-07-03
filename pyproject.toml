@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib",
     "pandas",
     "websockets",
+    "aiohttp",
     "maturin",
 ]
 
@@ -23,7 +24,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
-    "dotenv",
+    "python-dotenv",
 ]
 
 # [build-system]
