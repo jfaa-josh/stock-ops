@@ -25,6 +25,9 @@ class SQLiteWriter:
         self.schema_initialized = True
 
     def insert(self, data: dict):
+        if not isinstance(data, dict):
+            raise TypeError(f"SQLiteWriter.insert expected dict, got {type(data)}")
+
         if not self.schema_initialized:
             self.initialize_schema(data)
 

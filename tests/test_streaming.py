@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from stockops.data.utils import get_stream_filepath
+from stockops.data.utils import get_db_filepath
 
 # Fixed timestamp for deterministic testing
 FIXED_DATETIME = datetime(2025, 7, 1, 13, 52, 45)
@@ -17,7 +17,7 @@ def test_get_stream_filepath_defaults(mock_datetime):
     expected_name = f"stream_data_{EXPECTED_TIMESTAMP}.db"
     expected_path = Path(".") / expected_name
 
-    result = get_stream_filepath()
+    result = get_db_filepath()
     assert result == expected_path
     assert isinstance(result, Path)
     assert result.name.endswith(".db")
@@ -35,6 +35,6 @@ def test_get_stream_filepath_custom_args(mock_datetime):
     expected_name = f"{table_name}_{EXPECTED_TIMESTAMP}.db"
     expected_path = db_path / expected_name
 
-    result = get_stream_filepath(table_name=table_name, datestr_fmt=fmt, db_path=db_path)
+    result = get_db_filepath(data_type=table_name, datestr_fmt=fmt, db_path=db_path)
     assert result == expected_path
     assert result.parent == db_path

@@ -10,10 +10,15 @@ from pathlib import Path
 
 import websockets
 
+from stockops.config import eodhd_config as cfg
+from stockops.config.config import RAW_STREAMING_DIR
 from stockops.data.sql_db import SQLiteWriter
+from stockops.data.utils import get_db_filepath
+
+from .base_streaming_service import AbstractStreamingService
 
 
-class StreamManager:
+class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
         self.tasks: list[asyncio.Task] = []
 
@@ -26,8 +31,7 @@ class StreamManager:
         metadata = {
             "stream_type": table_name,
             "tickers": ",".join(symbols),
-            "expected_keys": ",".join(exp_data.keys()),
-            "field_descriptions": json.dumps(exp_data),  # <-- this line is new
+            "field_descriptions": json.dumps(exp_data),
             "start_time_utc": datetime.now(UTC).isoformat(),
             "ws_url": ws_url,
             "db_path": str(db_filepath),
@@ -79,10 +83,29 @@ class StreamManager:
         finally:
             writer.close()
 
-    def start_stream(
-        self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str, duration: int
-    ):
-        task = asyncio.create_task(self._stream_data(ws_url, exp_data, symbols, db_filepath, table_name, duration))
+    def start_stream(self, command: dict):
+        required_keys = ["tickers", "duration", "stream_type"]
+        for key in required_keys:
+            if key not in command:
+                raise ValueError(f"Missing required command key: {key}")
+
+        tickers = command["tickers"]
+        duration = command["duration"]
+        stream_type = command["stream_type"]
+
+        if stream_type == "trades":
+            url = cfg.EODHD_TRADE_URL
+            expected_dict = cfg.EODHD_TRADE_EXPECTED_DICT
+        elif stream_type == "quotes":
+            url = cfg.EODHD_QUOTE_URL
+            expected_dict = cfg.EODHD_QUOTE_EXPECTED_DICT
+        else:
+            raise ValueError(f"Unknown stream type: {stream_type}")
+
+        db_path = get_db_filepath("stream_data", "%Y-%m-%d_%H%M%S", RAW_STREAMING_DIR)
+        task = asyncio.get_running_loop().create_task(
+            self._stream_data(url, expected_dict, tickers, db_path, stream_type, duration)
+        )
         self.tasks.append(task)
 
     async def stop_all_streams(self):
@@ -91,6 +114,3 @@ class StreamManager:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
         print("All streams stopped.")
-
-    def clear_tasks(self):
-        self.tasks = []
