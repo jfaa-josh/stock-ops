@@ -1,13 +1,11 @@
 import asyncio
-import json
 from datetime import UTC, datetime
-from pathlib import Path
 
 import aiohttp
 
 from stockops.config import eodhd_config as cfg
 from stockops.config.config import RAW_HISTORICAL_DIR
-from stockops.data.sql_db import SQLiteWriter
+from stockops.data.sql_db import WriterRegistry
 from stockops.data.utils import get_db_filepath
 
 from .base_historical_service import AbstractHistoricalService
@@ -28,24 +26,15 @@ class EODHDHistoricalService(AbstractHistoricalService):
         dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
         return dt.date().isoformat()
 
-    async def _fetch_data(self, ws_url: str, exp_data: dict, db_filepath: Path, table_name: str):
+    async def _fetch_data(self, ws_url: str, exp_data: dict, data_type: str, table_name: str):
         rmv_fields = ["timestamp", "gmtoffset"]
+        print(exp_data)  # TODO: THIS IS A PLACEHOLDER OR METADATA !!!!!
 
         def filter_fields(record: dict) -> dict:
             return {k: v for k, v in record.items() if k not in rmv_fields}
 
-        writer = SQLiteWriter(db_filepath, table_name)
-
-        metadata = {
-            "stream_type": table_name,
-            "ticker": ws_url.split("/")[-1].split("?")[0],
-            "field_descriptions": json.dumps(exp_data),
-            "start_time_utc": datetime.now(UTC).isoformat(),
-            "ws_url": ws_url,
-            "db_path": str(db_filepath),
-        }
-        writer.insert_metadata(metadata)
-
+        writer_cache = {}
+        ts = None
         try:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -53,9 +42,26 @@ class EODHDHistoricalService(AbstractHistoricalService):
                         data = await response.json()
                         if isinstance(data, list):
                             for row in data:
-                                writer.insert(filter_fields(row))
+                                if data_type == "intraday":
+                                    ts = datetime.fromtimestamp(int(row["timestamp"]))
+                                db_path = get_db_filepath(data_type, "EODHD", ts, RAW_HISTORICAL_DIR)
+                                writer_key = (db_path, table_name)
+
+                                if writer_key not in writer_cache:
+                                    writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
+
+                                await writer_cache[writer_key].write(filter_fields(row))
+
                         elif isinstance(data, dict):
-                            writer.insert(filter_fields(data))
+                            if data_type == "intraday":
+                                ts = datetime.fromtimestamp(int(data["timestamp"]))
+                            db_path = get_db_filepath(data_type, "EODHD", ts, RAW_HISTORICAL_DIR)
+                            writer_key = (db_path, table_name)
+
+                            if writer_key not in writer_cache:
+                                writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
+
+                            await writer_cache[writer_key].write(filter_fields(data))
                         else:
                             print(f"[ERROR] Unexpected data format: {type(data)}")
                 except Exception as e:
@@ -64,9 +70,6 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
         except asyncio.CancelledError:
             print(f"[{table_name}] data fetch cancelled.")
-
-        finally:
-            writer.close()
 
     def start_historical_task(self, command: dict):
         required_keys = ["ticker", "interval", "start", "end"]
@@ -80,6 +83,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
         api_token = cfg.EODHD_API_TOKEN
 
         if interval in INTRADAY_FREQUENCIES:
+            data_type = "intraday"
             if "start" not in command or "end" not in command:
                 raise ValueError("Intraday data requires 'start' and 'end' in 'YYYY-MM-DD HH:MM' format.")
 
@@ -94,6 +98,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
             expected_dict = cfg.EODHD_INTRADAY_HISTORICAL_EXPECTED_DICT
 
         elif interval in INTERDAY_FREQUENCIES:
+            data_type = "interday"
             if "start" not in command or "end" not in command:
                 raise ValueError("Daily/monthly data requires 'start' and 'end' in 'YYYY-MM-DD HH:MM' format.")
 
@@ -110,10 +115,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
         else:
             raise ValueError(f"Unknown interval type: {interval}")
 
-        db_path = get_db_filepath("historical_data", "%Y-%m-%d_%H%M%S", RAW_HISTORICAL_DIR)
-        task = asyncio.get_running_loop().create_task(
-            self._fetch_data(url, expected_dict, db_path, f"{ticker}_{interval}")
-        )
+        task = asyncio.get_running_loop().create_task(self._fetch_data(url, expected_dict, data_type, ticker))
         self.tasks.append(task)
 
     async def wait_for_all(self):
