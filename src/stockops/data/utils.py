@@ -2,20 +2,27 @@ from datetime import datetime
 from pathlib import Path
 
 
-def get_db_filepath(
-    data_type: str = "stream_data", datestr_fmt: str = "%Y-%m-%d_%H%M%S", db_path: Path = Path(".")
-) -> Path:
+def get_db_filepath(data_type: str, data_source: str, timestamp: None | datetime, db_path: Path = Path(".")) -> Path:
     """
-    Generate a file path for a SQLite database with a timestamp.
+    Generate a file path for a SQLite database based on data type, source, and timestamp.
 
     Args:
-        table_name (str): Base name of the table or data source.
-        datestr_fmt (str): Datetime format string for timestamp.
-        db_path (Path): Directory in which to place the file.
+        data_type (str): "streaming", "intraday", or "interday"
+        data_source (str): e.g., "EODHD"
+        timestamp (datetime): Timestamp of the data row
+        db_path (Path): Base directory to store DB files
 
     Returns:
-        Path: Full path to the generated database file.
+        Path: Path to the SQLite DB file
     """
-    timestamp = datetime.now().strftime(datestr_fmt)
-    db_filename = f"{data_type}_{timestamp}.db"
-    return db_path / db_filename
+    if data_type == "streaming" and timestamp is not None:
+        date_str = timestamp.strftime("%Y-%m-%d")
+        filename = f"{data_type}_{date_str}_{data_source}.db"
+    elif data_type == "intraday" and timestamp is not None:
+        date_str = timestamp.strftime("%Y-%m")
+        filename = f"{data_type}_{date_str}_{data_source}.db"
+    elif data_type == "interday":
+        filename = f"{data_type}_{data_source}.db"
+    else:
+        raise ValueError(f"Unsupported data_type: {data_type}")
+    return db_path / filename

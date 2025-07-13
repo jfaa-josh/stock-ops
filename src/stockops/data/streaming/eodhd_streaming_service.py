@@ -6,13 +6,12 @@
 import asyncio
 import json
 from datetime import UTC, datetime
-from pathlib import Path
 
 import websockets
 
 from stockops.config import eodhd_config as cfg
 from stockops.config.config import RAW_STREAMING_DIR
-from stockops.data.sql_db import SQLiteWriter
+from stockops.data.sql_db import WriterRegistry
 from stockops.data.utils import get_db_filepath
 
 from .base_streaming_service import AbstractStreamingService
@@ -22,23 +21,11 @@ class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
         self.tasks: list[asyncio.Task] = []
 
-    async def _stream_data(
-        self, ws_url: str, exp_data: dict, symbols: list[str], db_filepath: Path, table_name: str, duration: int
-    ):
-        writer = SQLiteWriter(db_filepath, table_name)
-        expected_keys = set(exp_data)  # Keys to filter streaming data for expected structure
+    async def _stream_data(self, ws_url: str, exp_data: dict, symbols: list[str], duration: int):
+        expected_keys = set(exp_data)
+        table_name = "No Ticker Set"
 
-        metadata = {
-            "stream_type": table_name,
-            "tickers": ",".join(symbols),
-            "field_descriptions": json.dumps(exp_data),
-            "start_time_utc": datetime.now(UTC).isoformat(),
-            "ws_url": ws_url,
-            "db_path": str(db_filepath),
-            "duration_sec": str(duration),
-        }
-        writer.insert_metadata(metadata)
-
+        writer_cache = {}
         try:
             end_time = asyncio.get_event_loop().time() + duration
             while asyncio.get_event_loop().time() < end_time:
@@ -52,13 +39,23 @@ class EODHDStreamingService(AbstractStreamingService):
                         async for message in websocket:
                             try:
                                 data = json.loads(message)
+                                table_name = data["s"]
 
                                 if "status_code" in data and "message" in data:
                                     print(f"[{table_name}] Handshake: {data}")
                                     continue
 
-                                if expected_keys.issubset(data):  # Store only if data contains expected keys
-                                    writer.insert(data)
+                                if expected_keys.issubset(data):
+                                    ts = datetime.fromtimestamp(data["t"] / 1000, UTC)
+
+                                    # Dynamically compute db_path and writer
+                                    db_path = get_db_filepath("streaming", "EODHD", ts, RAW_STREAMING_DIR)
+                                    writer_key = (db_path, table_name)
+
+                                    if writer_key not in writer_cache:
+                                        writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
+
+                                    await writer_cache[writer_key].write(data)
                                     print(f"[{table_name}] {data}")
                                 else:
                                     print(f"[{table_name}] Ignored non-trade message: {data}")
@@ -80,8 +77,6 @@ class EODHDStreamingService(AbstractStreamingService):
 
         except asyncio.CancelledError:
             print(f"[{table_name}] Stream cancelled.")
-        finally:
-            writer.close()
 
     def start_stream(self, command: dict):
         required_keys = ["tickers", "duration", "stream_type"]
@@ -102,10 +97,7 @@ class EODHDStreamingService(AbstractStreamingService):
         else:
             raise ValueError(f"Unknown stream type: {stream_type}")
 
-        db_path = get_db_filepath("stream_data", "%Y-%m-%d_%H%M%S", RAW_STREAMING_DIR)
-        task = asyncio.get_running_loop().create_task(
-            self._stream_data(url, expected_dict, tickers, db_path, stream_type, duration)
-        )
+        task = asyncio.get_running_loop().create_task(self._stream_data(url, expected_dict, tickers, duration))
         self.tasks.append(task)
 
     async def stop_all_streams(self):
