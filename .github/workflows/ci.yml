@@ -1,7 +1,6 @@
 name: CI
 
-on:
-  push:
+on: push
 
 jobs:
   build:
@@ -49,3 +48,17 @@ jobs:
             echo "::error::docs/structure.md is out of sync. Run 'just generate-structure-doc'."
             exit 1
           )
+
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io just
+
+      - name: Generate .env from .python-version
+        run: just docker-build
