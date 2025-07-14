@@ -5,4 +5,4 @@ ARG AIRFLOW_VERSION
 FROM apache/airflow:${AIRFLOW_VERSION}-python${PYTHON_VERSION}
 
 USER root
-COPY dags /opt/airflow/dags
+COPY airflow/dags /opt/airflow/dags
