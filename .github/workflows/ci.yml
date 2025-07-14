@@ -50,15 +50,16 @@ jobs:
           )
 
   docker:
+    name: Build Docker Images
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install just
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io just
+          curl -sL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
       - name: Generate .env from .python-version
         run: just docker-build
