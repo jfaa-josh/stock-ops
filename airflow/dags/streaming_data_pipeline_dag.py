@@ -1,73 +1,96 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator
-from datetime import datetime, timedelta
-import asyncio
-import logging
-
-from stockops.data.controller import (
-    init_controller,
-    run_controller_once,
-)
-from stockops.data.providers import get_streaming_service
-
-# -----------------------------------------------------------------------------
-# DAG CONFIGURATION
-# -----------------------------------------------------------------------------
-MAX_STREAMS = 3
+from airflow.providers.http.operators.http import SimpleHttpOperator
+from airflow.utils.dates import days_ago
+from airflow.utils.trigger_rule import TriggerRule
+import json
 
 default_args = {
     "owner": "airflow",
-    "depends_on_past": False,
-    "start_date": datetime(2025, 1, 1),
-    "retries": 0,
-    "retry_delay": timedelta(minutes=5),
+    "start_date": days_ago(1),
 }
 
-dag = DAG(
-    dag_id="streaming_data_pipeline",
+with DAG(
+    dag_id="streaming_data_pipeline_dag",
     default_args=default_args,
-    schedule_interval=None,  # Manual trigger or external scheduler
+    schedule_interval=None,  # Manual trigger only
     catchup=False,
-    description="Run streaming data API calls through controller",
-    params={  # Default command list (can be overridden in web UI)
-        "commands": [
-            {
-                "type": "start_stream",
-                "stream_type": "trades",
-                "tickers": ["SPY"],
-                "duration": 10
-            },
-            {
-                "type": "start_stream",
-                "stream_type": "trades",
-                "tickers": ["QQQ"],
-                "duration": 12
-            }
-        ]
-    }
-)
+    tags=["streaming", "historical"],
+) as dag:
 
-# -----------------------------------------------------------------------------
-# TASK FUNCTION
-# -----------------------------------------------------------------------------
-def run_streaming_pipeline(**context):
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    # Task 1: Start streaming trades
+    start_stream_trades = SimpleHttpOperator(
+        task_id="start_stream_trades",
+        method="POST",
+        http_conn_id="controller_api",
+        endpoint="send_command",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({
+            "type": "start_stream",
+            "stream_type": "trades",
+            "tickers": ["SPY"],
+            "duration": 10
+        }),
     )
 
-    service = get_streaming_service("EODHD")
-    init_controller(service, historical_service=None, max_streams=MAX_STREAMS)
+    # Task 2: Start streaming quotes
+    start_stream_quotes = SimpleHttpOperator(
+        task_id="start_stream_quotes",
+        method="POST",
+        http_conn_id="controller_api",
+        endpoint="send_command",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({
+            "type": "start_stream",
+            "stream_type": "quotes",
+            "tickers": ["SPY"],
+            "duration": 10
+        }),
+    )
 
-    commands = context["params"]["commands"]
-    asyncio.run(run_controller_once(commands))
+    # Task 3: Fetch historical intraday data
+    fetch_intraday = SimpleHttpOperator(
+        task_id="fetch_intraday",
+        method="POST",
+        http_conn_id="controller_api",
+        endpoint="send_command",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({
+            "type": "fetch_historical",
+            "ticker": "SPY.US",
+            "interval": "1m",
+            "start": "2025-07-02 09:30",
+            "end": "2025-07-02 16:00"
+        }),
+    )
 
-# -----------------------------------------------------------------------------
-# PYTHON TASK
-# -----------------------------------------------------------------------------
-run_streams_task = PythonOperator(
-    task_id="run_streaming_controller",
-    python_callable=run_streaming_pipeline,
-    provide_context=True,
-    dag=dag,
-)
+    # Task 4: Fetch historical daily data
+    fetch_daily = SimpleHttpOperator(
+        task_id="fetch_daily",
+        method="POST",
+        http_conn_id="controller_api",
+        endpoint="send_command",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({
+            "type": "fetch_historical",
+            "ticker": "SPY.US",
+            "interval": "d",
+            "start": "2025-07-02 09:30",
+            "end": "2025-07-03 16:00"
+        }),
+    )
+
+    # Task 5: Shutdown controller (optional)
+    shutdown = SimpleHttpOperator(
+        task_id="shutdown_controller",
+        method="POST",
+        http_conn_id="controller_api",
+        endpoint="send_command",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({
+            "type": "shutdown"
+        }),
+        trigger_rule=TriggerRule.ALL_DONE,  # Run even if previous tasks fail
+    )
+
+    # Define task dependencies
+    start_stream_trades >> start_stream_quotes >> fetch_intraday >> fetch_daily >> shutdown

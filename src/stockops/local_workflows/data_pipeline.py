@@ -1,69 +1,52 @@
-import asyncio
-import logging
+import requests
 
-from stockops.data.controller import init_controller, send_command, stop_controller_from_thread
-from stockops.data.historical.providers import get_historical_service
-from stockops.data.streaming.providers import get_streaming_service
+CONTROLLER_URL = "http://localhost:8000/send_command"  # Change if running in Docker
 
-USE_SERVICE = "EODHD"  # Change to your desired service
-MAX_STREAMS = 5  # Set your desired max concurrent streams (historical API pulls, API streams)
 
-# -----------------------------------------------------------------------------
-# LOGGING CONFIG (optional: can be removed or replaced with project-wide setup)
-# -----------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+def send_command_http(command: dict):
+    print(f"Sending command: {command}")
+    try:
+        response = requests.post(CONTROLLER_URL, json=command)
+        response.raise_for_status()
+        print("✅ Response:", response.json())
+    except requests.RequestException as e:
+        print("❌ Failed to send command:", e)
 
-# -----------------------------------------------------------------------------
-# ONE-TIME INIT: Controller + Stream Service
-# -----------------------------------------------------------------------------
-streaming_service = get_streaming_service(USE_SERVICE)
-historical_service = get_historical_service(USE_SERVICE)
-init_controller(streaming_service=streaming_service, historical_service=historical_service, max_streams=MAX_STREAMS)
 
 # -----------------------------------------------------------------------------
-# MANUAL CALL BLOCKS (run one at a time, manually)
+# MANUAL COMMAND BLOCKS — Run these one at a time during local dev
 # -----------------------------------------------------------------------------
-# To use interactively, you can run these lines one-by-one in a debugger or REPL.
-# For example, in VSCode, highlight and run a single command block in interactive mode.
 
-asyncio.run(
-    send_command(
-        {
-            "type": "fetch_historical",
-            "ticker": "SPY.US",
-            "interval": "1m",
-            "start": "2025-07-02 09:30",
-            "end": "2025-07-02 16:00",
-        }
-    )
+# --- Example 1: Start streaming trades
+send_command_http({"type": "start_stream", "stream_type": "trades", "tickers": ["SPY"], "duration": 10})
+
+# --- Example 2: Start streaming quotes
+send_command_http({"type": "start_stream", "stream_type": "quotes", "tickers": ["SPY"], "duration": 10})
+
+# --- Example 3: Fetch historical intraday data
+send_command_http(
+    {
+        "type": "fetch_historical",
+        "ticker": "SPY.US",
+        "interval": "1m",
+        "start": "2025-07-02 09:30",
+        "end": "2025-07-02 16:00",
+    }
 )
 
-asyncio.run(
-    send_command(
-        {
-            "type": "fetch_historical",
-            "ticker": "SPY.US",
-            "interval": "d",
-            "start": "2025-07-02 09:30",
-            "end": "2025-07-03 16:00",
-        }
-    )
+# --- Example 4: Fetch historical daily data
+send_command_http(
+    {
+        "type": "fetch_historical",
+        "ticker": "SPY.US",
+        "interval": "d",
+        "start": "2025-07-02 09:30",
+        "end": "2025-07-03 16:00",
+    }
 )
 
-asyncio.run(send_command({"type": "start_stream", "stream_type": "trades", "tickers": ["SPY"], "duration": 10}))
-
-asyncio.run(send_command({"type": "start_stream", "stream_type": "quotes", "tickers": ["SPY"], "duration": 10}))
-
-# --- Example 3: Shut down early (optional) ---
-asyncio.run(send_command({"type": "shutdown"}))
-
-# --- Optional: Stop from outside sync context ---
-stop_controller_from_thread()
-
-# -----------------------------------------------------------------------------
-# NOTE:
-# Controller auto-shuts down after all commands complete and no active streams remain.
-# You do NOT need to call `shutdown` manually unless you're aborting mid-session.
+# --- Example 5: Shutdown (optional, clean shutdown signal)
+send_command_http({"type": "shutdown"})
 
 
 ### THIS NEEDS TO CHANGE USING METADATA SO I CAN RUN THIS THROUGH CONTROLLER ###
