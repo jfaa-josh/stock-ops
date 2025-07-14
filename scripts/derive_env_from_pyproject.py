@@ -6,8 +6,8 @@ with open("pyproject.toml", "rb") as f:
 
 # Extract python version
 python_spec = config["project"]["requires-python"]
-python_full = python_spec.strip("><=~^").split(",")[0]
-python_minor = ".".join(python_full.split(".")[:2])
+python_version = python_spec.strip("><=~^").split(",")[0]
+python_version = ".".join(python_version.split(".")[:2])  # Drop patch version if present
 
 # Look for apache-airflow in core dependencies
 airflow_version = None
@@ -20,7 +20,6 @@ for dep in config["project"]["dependencies"]:
 
 # Write to .env
 with open(".env", "w") as f:
-    f.write(f"PYTHON_FULL={python_full}\n")
-    f.write(f"PYTHON_MINOR={python_minor}\n")
+    f.write(f"PYTHON_VERSION={python_version}\n")
     if airflow_version:
         f.write(f"AIRFLOW_VERSION={airflow_version}\n")

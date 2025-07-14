@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: docker/controller/Dockerfile
       args:
-        PYTHON_VERSION: ${PYTHON_FULL}
+        PYTHON_VERSION: ${PYTHON_VERSION}
     ports:
       - "8000:8000"  # expose FastAPI
     restart: always
@@ -18,7 +18,7 @@ services:
       context: .
       dockerfile: docker/airflow/Dockerfile
       args:
-        PYTHON_VERSION: ${PYTHON_MINOR}
+        PYTHON_VERSION: ${PYTHON_VERSION}
         AIRFLOW_VERSION: ${AIRFLOW_VERSION}
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
