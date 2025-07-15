@@ -7,11 +7,13 @@ services:
       args:
         PYTHON_VERSION: ${PYTHON_VERSION}
     ports:
-      - "8000:8000"  # expose FastAPI
+      - "8000:8000"
     restart: always
+    env_file:
+      - .env
 
-  airflow:
-    container_name: stockops-airflow
+  airflow-webserver:
+    container_name: stockops-airflow-web
     build:
       context: .
       dockerfile: docker/airflow/Dockerfile
@@ -23,11 +25,43 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
     volumes:
       - ./airflow/dags:/opt/airflow/dags
+      - airflow_db:/opt/airflow
     ports:
       - "8080:8080"
     command: >
       bash -c "
-        airflow db init &&
-        airflow users create --username admin --password admin --firstname Air --lastname Flow --role Admin --email admin@example.com &&
-        airflow webserver & airflow scheduler
+        airflow db migrate &&
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin || true &&
+        exec airflow api-server
       "
+
+  airflow-scheduler:
+    container_name: stockops-airflow-scheduler
+    build:
+      context: .
+      dockerfile: docker/airflow/Dockerfile
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_db:/opt/airflow
+    command: >
+      bash -c "
+        while ! airflow db check; do
+          echo 'Waiting for DB to be ready...'
+          sleep 2
+        done
+        exec airflow scheduler
+      "
+
+volumes:
+  airflow_db:
