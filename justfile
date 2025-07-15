@@ -43,5 +43,6 @@ generate-structure-doc:
 docker-build:
   chmod +x scripts/derive_env_from_pyproject.py
   ./scripts/derive_env_from_pyproject.py
-  docker compose build controller airflow-api-server airflow-scheduler
-  if [ "${CI:-}" = "true" ]; then rm .env; fi # Only remove .env in CI to avoid issues with local development
+  test -f .env || (echo ".env not found after derive_env_from_pyproject.py" && exit 1)
+  docker compose build controller postgres prefect-server prefect-agent
+  if [ "${CI:-}" = "true" ]; then rm .env; fi

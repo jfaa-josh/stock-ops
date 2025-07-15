@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     {name = "Josh Fody", email = "josh@jfadvancedanalytics.com"}
 ]
-requires-python = "==3.12.*"
+requires-python = "==3.13.*"
 dependencies = [
     "numpy",
     "matplotlib",
@@ -15,10 +15,7 @@ dependencies = [
     "aiohttp",
     "fastapi",
     "requests",
-    "apache-airflow==3.0.2",
-    "apache-airflow-providers-http",
-    "apache-airflow-providers-postgres",
-    "psycopg2-binary",
+    "prefect==3.4.8",
 ]
 
 [dependency-groups]
@@ -26,6 +23,7 @@ dev = [
     "pre-commit",
     "ruff",
     "mypy",
+    "types-requests",
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
@@ -38,7 +36,7 @@ dev = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py313"
 respect-gitignore = true
 
 [tool.ruff.lint]
@@ -65,7 +63,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 ignore_missing_imports = true
 warn_unused_ignores = true
 strict_equality = true
