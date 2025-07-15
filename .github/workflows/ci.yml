@@ -10,8 +10,6 @@ jobs:
     env:
       DATA_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
       PYTHONPATH: src
-      AIRFLOW_ADMIN_USER: ${{ secrets.AIRFLOW_ADMIN_USER }}
-      AIRFLOW_ADMIN_PASSWORD: ${{ secrets.AIRFLOW_ADMIN_PASSWORD }}
 
     steps:
       - name: Checkout code
