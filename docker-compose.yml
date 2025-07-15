@@ -3,97 +3,39 @@ services:
     image: postgres:13
     container_name: stockops-postgres
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect
+      POSTGRES_DB: prefect
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-U", "prefect"]
       interval: 5s
       retries: 5
     restart: always
 
-  airflow-init:
-    image: apache/airflow:${AIRFLOW_VERSION}-python${PYTHON_VERSION}
-    depends_on:
-      postgres:
-        condition: service_healthy
+  prefect-server:
+    image: prefecthq/prefect:2-python3.12
+    command: prefect server start --host 0.0.0.0 --port 4200
     environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-    entrypoint:
-      - bash
-      - -c
-      - |
-        airflow db migrate
-        airflow users create \
-          --username josh \
-          --password yourpassword123 \
-          --firstname Josh \
-          --lastname Admin \
-          --role Admin \
-          --email admin@example.com || true
-
-  airflow-api-server:
-    container_name: stockops-airflow-api
-    build:
-      context: .
-      dockerfile: docker/airflow/Dockerfile
-      args:
-        PYTHON_VERSION: ${PYTHON_VERSION}
-        AIRFLOW_VERSION: ${AIRFLOW_VERSION}
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-      AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.basic_auth
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
-      AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
-      AIRFLOW_HOME: /opt/airflow
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
+      PREFECT_ORION_API_HOST: 0.0.0.0
+      PREFECT_ORION_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
     ports:
-      - "8080:8080"
+      - 4200:4200
     depends_on:
-      postgres:
-        condition: service_healthy
-      airflow-init:
-        condition: service_completed_successfully
-    command: >
-      bash -c "
-        exec airflow api-server
-      "
-    restart: always
+      - postgres
 
-  airflow-scheduler:
-    container_name: stockops-airflow-scheduler
+  prefect-agent:
     build:
-      context: .
-      dockerfile: docker/airflow/Dockerfile
       args:
         PYTHON_VERSION: ${PYTHON_VERSION}
-        AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+    command: prefect agent start -q default
     environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-      AIRFLOW_HOME: /opt/airflow
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
+      PREFECT_API_URL: http://prefect-server:4200/api
     depends_on:
-      postgres:
-        condition: service_healthy
-      airflow-init:
-        condition: service_completed_successfully
-      airflow-api-server:
-        condition: service_started
-    command: >
-      bash -c "
-        airflow db check &&
-        exec airflow scheduler
-      "
-    restart: always
+      - prefect-server
+    volumes:
+      - ./flows:/flows
 
   controller:
     container_name: stockops-controller
