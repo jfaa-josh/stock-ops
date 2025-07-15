@@ -15,7 +15,7 @@ services:
     restart: always
 
   prefect-server:
-    image: prefecthq/prefect:2-python3.12
+    image: prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
     command: prefect server start --host 0.0.0.0 --port 4200
     environment:
       PREFECT_ORION_API_HOST: 0.0.0.0
@@ -27,9 +27,12 @@ services:
 
   prefect-agent:
     build:
+      context: .
+      dockerfile: docker/prefect/Dockerfile
       args:
         PYTHON_VERSION: ${PYTHON_VERSION}
-    command: prefect agent start -q default
+        PREFECT_VERSION: ${PREFECT_VERSION}
+    command: sh -c "sleep 10 && prefect worker start --pool default"
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
     depends_on:
@@ -44,6 +47,7 @@ services:
       dockerfile: docker/controller/Dockerfile
       args:
         PYTHON_VERSION: ${PYTHON_VERSION}
+        PREFECT_VERSION: ${PREFECT_VERSION}
     ports:
       - "8000:8000"
     env_file:
