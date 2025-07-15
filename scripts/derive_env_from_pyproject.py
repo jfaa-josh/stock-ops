@@ -1,24 +1,23 @@
 #!/usr/bin/env python
-import tomllib
+import pathlib
 
 ENV_PATH = ".env"
 
-def extract_versions(pyproject_path: str = "pyproject.toml"):
+def get_python_version_truncated():
+    with open(".python-version", "r") as f:
+        full_version = f.read().strip()
+    return ".".join(full_version.split(".")[:2])  # e.g., "3.13.5" → "3.13"
+
+def get_prefect_version(pyproject_path: str = "pyproject.toml"):
+    import tomllib
     with open(pyproject_path, "rb") as f:
         config = tomllib.load(f)
-
-    python_spec = config["project"]["requires-python"]
-    full_python_version = python_spec.strip("><=~^").split(",")[0]
-
-    prefect_version = None
     for dep in config["project"]["dependencies"]:
         if dep.startswith("prefect"):
             parts = dep.split("==")
             if len(parts) == 2:
-                prefect_version = parts[1]
-            break
-
-    return full_python_version, prefect_version
+                return parts[1]
+    return None
 
 def update_env_file(python_version: str, prefect_version: str | None):
     try:
@@ -56,5 +55,6 @@ def update_env_file(python_version: str, prefect_version: str | None):
         f.writelines(new_lines)
 
 if __name__ == "__main__":
-    python_version, prefect_version = extract_versions()
+    python_version = get_python_version_truncated()
+    prefect_version = get_prefect_version()
     update_env_file(python_version, prefect_version)
