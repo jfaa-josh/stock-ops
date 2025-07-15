@@ -38,9 +38,9 @@ docs/_build/
 
 # Ignore large data or generated files
 data/
-!data/schema/        # include schema if needed
+!data/schema/
 models/
-!models/schema/      # include schema if needed
+!models/schema/
 
 # Ignore compiled Rust/Python extensions (if using maturin)
 *.so
@@ -48,6 +48,7 @@ models/
 *.dll
 target/
 
-# Ignore Docker artifacts
-Dockerfile*
+# Ignore Docker artifacts (but allow service Dockerfiles)
+# DO NOT ignore Dockerfiles under docker/
+/Dockerfile
 .dockerignore

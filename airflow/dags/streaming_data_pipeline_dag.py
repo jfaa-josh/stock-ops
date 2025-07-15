@@ -93,4 +93,4 @@ with DAG(
     )
 
     # Define task dependencies
-    start_stream_trades >> start_stream_quotes >> fetch_intraday >> fetch_daily >> shutdown
+    _ = start_stream_trades >> start_stream_quotes >> fetch_intraday >> fetch_daily >> shutdown

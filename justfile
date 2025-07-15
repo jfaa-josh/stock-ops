@@ -43,5 +43,5 @@ generate-structure-doc:
 docker-build:
   chmod +x scripts/derive_env_from_pyproject.py
   ./scripts/derive_env_from_pyproject.py
-  docker compose build controller airflow
-  rm .env
+  docker compose build controller airflow-webserver airflow-scheduler
+  if [ "${CI:-}" = "true" ]; then rm .env; fi # Only remove .env in CI to avoid issues with local development
