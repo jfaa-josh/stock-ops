@@ -1,16 +1,18 @@
 services:
-  controller:
-    container_name: stockops-controller
-    build:
-      context: .
-      dockerfile: docker/controller/Dockerfile
-      args:
-        PYTHON_VERSION: ${PYTHON_VERSION}
-    ports:
-      - "8000:8000"
+  postgres:
+    image: postgres:13
+    container_name: stockops-postgres
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
     restart: always
-    env_file:
-      - .env
 
   airflow-webserver:
     container_name: stockops-airflow-web
@@ -23,23 +25,29 @@ services:
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.www.security.DefaultAuthBackend
+      - _AIRFLOW_WWW_USER_CREATE=True
+      - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_ADMIN_USER:-admin}
+      - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
+      - _AIRFLOW_WWW_USER_EMAIL=admin@example.com
+      - _AIRFLOW_WWW_USER_FIRSTNAME=Admin
+      - _AIRFLOW_WWW_USER_LASTNAME=User
+      - AIRFLOW_HOME=/opt/airflow
     volumes:
       - ./airflow/dags:/opt/airflow/dags
-      - airflow_db:/opt/airflow
+      - ./airflow/logs:/opt/airflow/logs
     ports:
       - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
     command: >
       bash -c "
         airflow db migrate &&
-        airflow users create \
-          --username admin \
-          --firstname Admin \
-          --lastname User \
-          --role Admin \
-          --email admin@example.com \
-          --password admin || true &&
-        exec airflow api-server
+        exec airflow webserver
       "
+    restart: always
 
   airflow-scheduler:
     container_name: stockops-airflow-scheduler
@@ -51,17 +59,36 @@ services:
         AIRFLOW_VERSION: ${AIRFLOW_VERSION}
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW_HOME=/opt/airflow
     volumes:
       - ./airflow/dags:/opt/airflow/dags
-      - airflow_db:/opt/airflow
+      - ./airflow/logs:/opt/airflow/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_started
     command: >
       bash -c "
-        while ! airflow db check; do
-          echo 'Waiting for DB to be ready...'
-          sleep 2
-        done
         exec airflow scheduler
       "
+    restart: always
+
+  controller:
+    container_name: stockops-controller
+    build:
+      context: .
+      dockerfile: docker/controller/Dockerfile
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION}
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: always
 
 volumes:
-  airflow_db:
+  postgres_data:

@@ -13,11 +13,12 @@ dependencies = [
     "pandas",
     "websockets",
     "aiohttp",
-    "maturin",
     "fastapi",
     "requests",
     "apache-airflow==3.0.2",
     "apache-airflow-providers-http",
+    "apache-airflow-providers-postgres",
+    "psycopg2-binary",
 ]
 
 [dependency-groups]
