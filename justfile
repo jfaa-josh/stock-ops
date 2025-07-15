@@ -1,3 +1,5 @@
+set shell := ["bash", "-cu"]
+
 description:
   @echo 'This file is used to run all automated commands!'
 
@@ -39,4 +41,7 @@ generate-structure-doc:
 
 # Generate a Dockerfile for the project
 docker-build:
-    docker build --build-arg PYTHON_VERSION={{PYTHON_VERSION}} -t stockops .
+  chmod +x scripts/derive_env_from_pyproject.py
+  ./scripts/derive_env_from_pyproject.py
+  docker compose build controller airflow-api-server airflow-scheduler
+  if [ "${CI:-}" = "true" ]; then rm .env; fi # Only remove .env in CI to avoid issues with local development

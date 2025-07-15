@@ -1,14 +1,14 @@
 name: CI
 
 on:
-  push:
+  push: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     env:
-      DATA_API_TOKEN: ${{ secrets.DATA_API_TOKEN }}
+      DATA_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
       PYTHONPATH: src
 
     steps:
@@ -49,3 +49,18 @@ jobs:
             echo "::error::docs/structure.md is out of sync. Run 'just generate-structure-doc'."
             exit 1
           )
+
+  docker:
+    name: Build Docker Images
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install just
+        run: |
+          curl -sL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+      - name: Generate .env from .python-version
+        run: just docker-build
