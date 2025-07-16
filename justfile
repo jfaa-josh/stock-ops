@@ -23,7 +23,6 @@ mypy:
     uv run mypy
 
 test:
-  - export PYTHONPATH=src
   - pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
 
 generate-structure-doc:
