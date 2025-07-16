@@ -7,11 +7,6 @@ import time
 import pytest
 import requests
 
-from local_workflows.data_pipeline import (
-    shutdown_fastapi,
-    start_fastapi_subprocess,
-)
-
 BASE_URL = "http://127.0.0.1:8000"
 HEALTH_ENDPOINT = f"{BASE_URL}/health"
 SEND_ENDPOINT = f"{BASE_URL}/send_command"
@@ -26,28 +21,74 @@ logging.basicConfig(
 logger = logging.getLogger("test_logger")
 
 
-@pytest.fixture(scope="function")
-def fastapi_process(monkeypatch):
-    """Starts the FastAPI subprocess with PYTHONPATH=src for test environment."""
+def _start_fastapi_subprocess():
+    """Start the FastAPI controller API using uvicorn as a background subprocess."""
+    logger.info("🔧 Starting FastAPI API subprocess...")
 
-    def _patched_popen(*args, **kwargs):
-        env = kwargs.get("env", os.environ.copy())
-        env["PYTHONPATH"] = "src"
-        kwargs["env"] = env
-        return original_popen(*args, **kwargs)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
 
-    original_popen = subprocess.Popen
-    monkeypatch.setattr(subprocess, "Popen", _patched_popen)
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "stockops.runtime.data_pipeline_api:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        env=env,
+    )
 
-    logger.info("🔧 Starting FastAPI subprocess for controller tests...")
-    proc = start_fastapi_subprocess()
-    logger.info("✅ FastAPI subprocess started.")
-    time.sleep(2)  # Give the server time to initialize
+    try:
+        for _ in range(10):
+            try:
+                r = requests.get(HEALTH_ENDPOINT)
+                if r.status_code == 200:
+                    logger.info("✅ FastAPI service is online.")
+                    return process
+            except requests.ConnectionError:
+                time.sleep(0.5)
 
-    yield proc
+        # If we reach here, FastAPI didn't start
+        if process.stdout:
+            logger.error("❌ Failed to start FastAPI. Partial logs:")
+            for _ in range(20):
+                line = process.stdout.readline()
+                if not line:
+                    break
+                logger.error(line.strip())
 
+        process.terminate()
+        raise RuntimeError("❌ Failed to start FastAPI service.")
+
+    except Exception:
+        process.terminate()
+        raise
+
+
+def _shutdown_fastapi():
+    """Shutdown FastAPI controller via its HTTP endpoint."""
     logger.info("🧼 Shutting down FastAPI subprocess after all tests...")
-    shutdown_fastapi()
+    try:
+        response = requests.post(SHUTDOWN_ENDPOINT)
+        logger.info("Shutdown response: %s", response.json())
+    except requests.RequestException as e:
+        logger.error("❌ Failed to shut down FastAPI: %s", e)
+
+
+@pytest.fixture(scope="function")
+def fastapi_process():
+    proc = _start_fastapi_subprocess()
+    time.sleep(2)  # Allow time for full readiness
+    yield proc
+    _shutdown_fastapi()
     proc.terminate()
     proc.wait()
     logger.info("✅ FastAPI subprocess terminated cleanly.")
