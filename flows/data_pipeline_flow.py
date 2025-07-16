@@ -1,7 +1,7 @@
 from prefect import flow, task
 import httpx
 
-CONTROLLER_URL = "http://localhost:8000/send_command"  # Change for Docker networking
+CONTROLLER_URL = "http://stockops-controller:8000/send_command"
 
 
 @task
