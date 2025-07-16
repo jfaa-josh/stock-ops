@@ -1,4 +1,6 @@
 import logging
+import os
+import subprocess
 import sys
 import time
 
@@ -17,13 +19,26 @@ SHUTDOWN_ENDPOINT = f"{BASE_URL}/shutdown"
 
 # Logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.StreamHandler(sys.stdout)]
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("test_logger")
 
 
-@pytest.fixture(scope="module")
-def fastapi_process():
+@pytest.fixture(scope="function")
+def fastapi_process(monkeypatch):
+    """Starts the FastAPI subprocess with PYTHONPATH=src for test environment."""
+
+    def _patched_popen(*args, **kwargs):
+        env = kwargs.get("env", os.environ.copy())
+        env["PYTHONPATH"] = "src"
+        kwargs["env"] = env
+        return original_popen(*args, **kwargs)
+
+    original_popen = subprocess.Popen
+    monkeypatch.setattr(subprocess, "Popen", _patched_popen)
+
     logger.info("🔧 Starting FastAPI subprocess for controller tests...")
     proc = start_fastapi_subprocess()
     logger.info("✅ FastAPI subprocess started.")
