@@ -23,9 +23,13 @@ mypy:
     uv run mypy
 
 test:
-    uv run pytest
+    uv run pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
 
 generate-structure-doc:
+  if ! command -v tree &> /dev/null; then \
+    echo "'tree' not found. Installing..."; \
+    sudo apt-get update && sudo apt-get install -y tree; \
+  fi
   mkdir -p docs
   echo "# Repository Structure" > docs/structure.md
   echo "" >> docs/structure.md
