@@ -44,7 +44,7 @@ def _start_fastapi_subprocess():
         text=True,
         bufsize=1,
         env=env,
-        cwd="src",
+        cwd=None,  # do not cd into src
     )
 
     try:
