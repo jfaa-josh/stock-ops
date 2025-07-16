@@ -75,3 +75,6 @@ mypy_path = ["src", "tests"]
 # disallow_untyped_defs = true
 # check_untyped_defs = true
 # strict = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
