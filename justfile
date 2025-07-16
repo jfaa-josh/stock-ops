@@ -23,7 +23,7 @@ mypy:
     uv run mypy
 
 test:
-  - pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
+    uv run pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
 
 generate-structure-doc:
   if ! command -v tree &> /dev/null; then \
