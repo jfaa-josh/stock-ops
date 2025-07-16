@@ -149,17 +149,3 @@ def start_controller_in_thread():
 
 def stop_controller_from_thread():
     shutdown_event.set()
-
-
-# --- DAG/Airflow-safe one-shot interface ---
-async def run_controller_once(commands: list[dict]):
-    """
-    Run controller in Airflow-safe, non-threaded mode.
-    Sends a batch of commands and runs the orchestrator to completion.
-    """
-    for cmd in commands:
-        if task_queue.full():
-            raise RuntimeError(f"Task queue full. Cannot enqueue command: {cmd}")
-        await task_queue.put(cmd)
-
-    await orchestrate()
