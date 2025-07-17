@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any, Dict, List
+import sys
 
 from prefect import flow, task, get_run_logger
 
@@ -74,15 +75,17 @@ def controller_driver_flow(
     """
     setup_controller(streaming_provider, historical_provider, max_streams)
 
-    try:
-        for cmd in commands:
-            _ = emit_command(cmd)
-    finally:
-        teardown_controller()
+    for cmd in commands:
+        _ = emit_command(cmd)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.DEBUG,  # Required to see controller.py logs
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,  # <-- Overwrites any existing config (Python 3.8+)
+        )
 
     commands_list = [
         {"type": "start_stream", "stream_type": "trades", "tickers": ["SPY"], "duration": 10},

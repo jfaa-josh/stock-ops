@@ -10,7 +10,7 @@ from stockops.data.historical.base_historical_service import AbstractHistoricalS
 from stockops.data.sql_db import WriterRegistry
 from stockops.data.streaming.base_streaming_service import AbstractStreamingService
 
-logger = logging.getLogger("controller")
+logger = logging.getLogger(__name__)
 
 # --- Core State ---
 # Asyncio queue will live in controller loop; we schedule puts via run_coroutine_threadsafe
