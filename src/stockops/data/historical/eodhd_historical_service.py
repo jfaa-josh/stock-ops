@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime
 
 import aiohttp
@@ -12,6 +13,8 @@ from .base_historical_service import AbstractHistoricalService
 
 INTRADAY_FREQUENCIES = {"1m", "5m", "1h"}
 INTERDAY_FREQUENCIES = {"d", "w", "m"}
+
+logger = logging.getLogger(__name__)
 
 
 class EODHDHistoricalService(AbstractHistoricalService):
@@ -28,7 +31,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
     async def _fetch_data(self, ws_url: str, exp_data: dict, data_type: str, table_name: str):
         rmv_fields = ["timestamp", "gmtoffset"]
-        print(exp_data)  # TODO: THIS IS A PLACEHOLDER OR METADATA !!!!!
+        logger.debug("Expected schema: %s", exp_data)  # TODO: PLACEHOLDER FOR Metadata / schema debug aid
 
         def filter_fields(record: dict) -> dict:
             return {k: v for k, v in record.items() if k not in rmv_fields}
@@ -40,6 +43,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
                 try:
                     async with session.get(ws_url) as response:
                         data = await response.json()
+
                         if isinstance(data, list):
                             for row in data:
                                 if data_type == "intraday":
@@ -62,14 +66,16 @@ class EODHDHistoricalService(AbstractHistoricalService):
                                 writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
 
                             await writer_cache[writer_key].write(filter_fields(data))
+
                         else:
-                            print(f"[ERROR] Unexpected data format: {type(data)}")
+                            logger.error("[%s] Unexpected data format: %s", table_name, type(data).__name__)
+
                 except Exception as e:
-                    print(f"[{table_name}] Connection error: {e} — retrying in 5 seconds.")
+                    logger.warning("[%s] Connection error: %s — retrying in 5 seconds.", table_name, e)
                     await asyncio.sleep(5)
 
         except asyncio.CancelledError:
-            print(f"[{table_name}] data fetch cancelled.")
+            logger.info("[%s] Data fetch cancelled.", table_name)
 
     def start_historical_task(self, command: dict):
         required_keys = ["ticker", "interval", "start", "end"]
@@ -117,6 +123,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
         task = asyncio.get_running_loop().create_task(self._fetch_data(url, expected_dict, data_type, ticker))
         self.tasks.append(task)
+        return task
 
     async def wait_for_all(self):
         await asyncio.gather(*self.tasks, return_exceptions=True)
