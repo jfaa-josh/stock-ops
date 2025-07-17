@@ -13,8 +13,6 @@ dependencies = [
     "pandas",
     "websockets",
     "aiohttp",
-    "fastapi",
-    "requests",
     "prefect==3.4.8",
 ]
 
