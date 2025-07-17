@@ -25,6 +25,5 @@ def run_single_test_file(filename: str):
     return result.returncode
 
 # Example usage
-run_single_test_file("test_data_pipeline_api_controller.py")
 run_single_test_file("test_datapipe.py")
 run_single_test_file("test_controller_isolated.py")
