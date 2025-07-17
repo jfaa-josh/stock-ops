@@ -1,115 +1,84 @@
-import subprocess
-import time
-import requests
-import sys
+import logging
 
-# Config
-CONTROLLER_URL = "http://localhost:8000"
-SEND_ENDPOINT = f"{CONTROLLER_URL}/send_command"
-SHUTDOWN_ENDPOINT = f"{CONTROLLER_URL}/shutdown"
-HEALTH_ENDPOINT = f"{CONTROLLER_URL}/health"
-API_STARTUP_WAIT = 2  # seconds
+from stockops.data.controller import (
+    init_controller,
+    send_command,
+    start_controller_in_thread,
+    stop_controller_from_thread,
+)
+from stockops.data.historical.providers import get_historical_service
+from stockops.data.streaming.providers import get_streaming_service
 
 
-def start_fastapi_subprocess():
-    """Start the FastAPI controller API using uvicorn as a background subprocess."""
-    print("🔧 Starting FastAPI API subprocess...")
+logger = logging.getLogger("data_pipeline")
 
-    process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "stockops.runtime.data_pipeline_api:app", "--host", "127.0.0.1", "--port", "8000"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,  # ensures output is string, not bytes
-        bufsize=1,  # line-buffered
+def setup_controller(streaming_provider: str = "EODHD",
+                     historical_provider: str = "EODHD",
+                     max_streams: int = 5) -> None:
+    """
+    Initialize the controller with streaming and historical services,
+    then start its background thread.
+    """
+    stream_svc = get_streaming_service(streaming_provider)
+    hist_svc = get_historical_service(historical_provider)
+
+    logger.info(
+        "Initializing controller (stream=%s, historical=%s, max_streams=%d)",
+        streaming_provider,
+        historical_provider,
+        max_streams,
     )
+    init_controller(stream_svc, hist_svc, max_streams=max_streams)
 
-    try:
-        for _ in range(10):
-            try:
-                r = requests.get("http://127.0.0.1:8000/health")
-                if r.status_code == 200:
-                    print("✅ FastAPI service is online.")
-                    return process
-            except requests.ConnectionError:
-                time.sleep(0.5)
-
-        # If we reach here, FastAPI didn't start
-        if process.stdout:
-            print("❌ Failed to start FastAPI. Partial logs:")
-            for _ in range(20):
-                line = process.stdout.readline()
-                if not line:
-                    break
-                print(line.strip())
-
-        process.terminate()
-        raise RuntimeError("❌ Failed to start FastAPI service.")
-
-    except Exception:
-        process.terminate()
-        raise
+    logger.info("Starting controller thread")
+    start_controller_in_thread()
 
 
-def send_command_http(command: dict):
-    print(f"Sending command: {command}")
-    try:
-        response = requests.post(SEND_ENDPOINT, json=command)
-        response.raise_for_status()
-        print("✅ Response:", response.json())
-    except requests.RequestException as e:
-        print("❌ Failed to send command:", e)
+async def emit_command(command: dict):
+    """
+    Send a single command into the controller's queue.
+    """
+    logger.info(f"Queuing command: {command!r}")
+    await send_command(command)
 
 
-def shutdown_fastapi():
-    print("Shutting down FastAPI controller...")
-    try:
-        response = requests.post(SHUTDOWN_ENDPOINT)
-        print("Shutdown response:", response.json())
-    except requests.RequestException as e:
-        print("❌ Failed to shut down FastAPI:", e)
+def teardown_controller():
+    """
+    Signal the controller thread to exit.
+    """
+    logger.info("Stopping controller thread…")
+    stop_controller_from_thread()
 
 
-# -----------------------------------------------------------------------------
-# MANUAL COMMAND BLOCKS — Run these one at a time during local dev
-# -----------------------------------------------------------------------------
-if main := __name__ == "__main__":
-    # --- Start FastAPI controller subprocess
-    api_proc = start_fastapi_subprocess()
+async def controller_driver_flow(
+    commands: list[dict],
+    streaming_provider: str = "EODHD",
+    historical_provider: str = "EODHD",
+    max_streams: int = 5
+):
+    # 1. init & start
+    setup_controller(streaming_provider, historical_provider, max_streams)
 
-    # --- Example 1: Start streaming trades
-    send_command_http({"type": "start_stream", "stream_type": "trades", "tickers": ["SPY"], "duration": 10})
+    # 2. send your commands
+    for cmd in commands:
+        await emit_command(cmd)
 
-    # --- Example 2: Start streaming quotes
-    send_command_http({"type": "start_stream", "stream_type": "quotes", "tickers": ["SPY"], "duration": 10})
+    # 3. clean up
+    teardown_controller()
 
-    # --- Example 3: Fetch historical intraday data
-    send_command_http(
-        {
-            "type": "fetch_historical",
-            "ticker": "SPY.US",
-            "interval": "1m",
-            "start": "2025-07-02 09:30",
-            "end": "2025-07-02 16:00",
-        }
-    )
 
-    # --- Example 4: Fetch historical daily data
-    send_command_http(
-        {
-            "type": "fetch_historical",
-            "ticker": "SPY.US",
-            "interval": "d",
-            "start": "2025-07-02 09:30",
-            "end": "2025-07-03 16:00",
-        }
-    )
+if __name__ == "__main__":
+    commands = [
+        {"type": "start_stream", "stream_type": "trades", "tickers": ["SPY"], "duration": 10},
+        # {"type": "start_stream", "stream_type": "quotes", "tickers": ["SPY"], "duration": 10},
+        # {"type": "fetch_historical", "ticker": "SPY.US", "interval": "1m",
+        #  "start": "2025-07-02 09:30", "end": "2025-07-02 16:00"},
+        # {"type": "fetch_historical", "ticker": "SPY.US", "interval": "d",
+        #  "start": "2025-07-02 09:30", "end": "2025-07-03 16:00"},
+        ]
 
-    # --- Shutdown FastAPI controller subprocess (also shutsdown any running controller threads)
-    shutdown_fastapi()
-    print("Terminating FastAPI subprocess...")
-    api_proc.terminate()  # <- Cross-platform safe
-    api_proc.wait()
-    print("✅ API subprocess terminated cleanly.")
+    _ = controller_driver_flow(commands, streaming_provider = "EODHD", historical_provider = "EODHD", max_streams = 5)
+
 
 
 ### THIS NEEDS TO CHANGE USING METADATA SO I CAN RUN THIS THROUGH CONTROLLER ###
