@@ -6,14 +6,10 @@
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
 
 import websockets
 
 from stockops.config import eodhd_config as cfg
-from stockops.config.config import RAW_STREAMING_DIR
-from stockops.data.sql_db import WriterRegistry
-from stockops.data.utils import get_db_filepath
 
 from .base_streaming_service import AbstractStreamingService
 
@@ -28,7 +24,6 @@ class EODHDStreamingService(AbstractStreamingService):
         expected_keys = set(exp_data)
         table_name = "No Ticker Set"
 
-        writer_cache = {}
         try:
             end_time = asyncio.get_running_loop().time() + duration
             while asyncio.get_running_loop().time() < end_time:
@@ -49,16 +44,8 @@ class EODHDStreamingService(AbstractStreamingService):
                                     continue
 
                                 if expected_keys.issubset(data):
-                                    ts = datetime.fromtimestamp(data["t"] / 1000, UTC)
-
-                                    db_path = get_db_filepath("streaming", "EODHD", ts, RAW_STREAMING_DIR)
-                                    writer_key = (db_path, table_name)
-
-                                if writer_key not in writer_cache:
-                                    writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
-
-                                    await writer_cache[writer_key].write(data)
-                                    logger.info("[%s] %s", table_name, data)
+                                    # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
+                                    logger.debug("[%s] Received data: %s", table_name, data)
                                 else:
                                     logger.debug("[%s] Ignored non-trade message: %s", table_name, data)
 
