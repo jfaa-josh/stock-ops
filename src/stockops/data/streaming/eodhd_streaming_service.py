@@ -54,8 +54,8 @@ class EODHDStreamingService(AbstractStreamingService):
                                     db_path = get_db_filepath("streaming", "EODHD", ts, RAW_STREAMING_DIR)
                                     writer_key = (db_path, table_name)
 
-                                    if writer_key not in writer_cache:
-                                        writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
+                                if writer_key not in writer_cache:
+                                    writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
 
                                     await writer_cache[writer_key].write(data)
                                     logger.info("[%s] %s", table_name, data)
