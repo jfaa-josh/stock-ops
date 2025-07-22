@@ -5,9 +5,6 @@ from datetime import UTC, datetime
 import aiohttp
 
 from stockops.config import eodhd_config as cfg
-from stockops.config.config import RAW_HISTORICAL_DIR
-from stockops.data.sql_db import WriterRegistry
-from stockops.data.utils import get_db_filepath
 
 from .base_historical_service import AbstractHistoricalService
 
@@ -30,14 +27,9 @@ class EODHDHistoricalService(AbstractHistoricalService):
         return dt.date().isoformat()
 
     async def _fetch_data(self, ws_url: str, exp_data: dict, data_type: str, table_name: str):
-        rmv_fields = ["timestamp", "gmtoffset"]
-        logger.debug("Expected schema: %s", exp_data)  # TODO: PLACEHOLDER FOR Metadata / schema debug aid
+        expected_keys = set(exp_data)
+        table_name = "No Ticker Set"
 
-        def filter_fields(record: dict) -> dict:
-            return {k: v for k, v in record.items() if k not in rmv_fields}
-
-        writer_cache = {}
-        ts = None
         try:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -46,26 +38,18 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
                         if isinstance(data, list):
                             for row in data:
-                                if data_type == "intraday":
-                                    ts = datetime.fromtimestamp(int(row["timestamp"]))
-                                db_path = get_db_filepath(data_type, "EODHD", ts, RAW_HISTORICAL_DIR)
-                                writer_key = (db_path, table_name)
-
-                                if writer_key not in writer_cache:
-                                    writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
-
-                                await writer_cache[writer_key].write(filter_fields(row))
+                                if expected_keys.issubset(data):
+                                    # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
+                                    logger.debug("[%s] Received data: %s", table_name, row)
+                                else:
+                                    logger.debug("[%s] Ignored non-trade message: %s", table_name, row)
 
                         elif isinstance(data, dict):
-                            if data_type == "intraday":
-                                ts = datetime.fromtimestamp(int(data["timestamp"]))
-                            db_path = get_db_filepath(data_type, "EODHD", ts, RAW_HISTORICAL_DIR)
-                            writer_key = (db_path, table_name)
-
-                            if writer_key not in writer_cache:
-                                writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
-
-                            await writer_cache[writer_key].write(filter_fields(data))
+                            if expected_keys.issubset(data):
+                                # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
+                                logger.debug("[%s] Received data: %s", table_name, data)
+                            else:
+                                logger.debug("[%s] Ignored non-trade message: %s", table_name, data)
 
                         else:
                             logger.error("[%s] Unexpected data format: %s", table_name, type(data).__name__)
