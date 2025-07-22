@@ -6,6 +6,7 @@ FROM prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
 
 WORKDIR /app
 
-COPY flows/ /app/flows
+COPY pyproject.toml /app/
+RUN pip install --no-cache-dir .
 
-CMD ["python", "flows/data_pipeline_flow.py"]
+COPY . /app

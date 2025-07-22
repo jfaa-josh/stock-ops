@@ -1,29 +1,13 @@
 services:
-  postgres:
-    image: postgres:13
-    container_name: stockops-postgres
-    environment:
-      POSTGRES_USER: prefect
-      POSTGRES_PASSWORD: prefect
-      POSTGRES_DB: prefect
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "prefect"]
-      interval: 5s
-      retries: 5
-    restart: always
-
   prefect-server:
     image: prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
-    command: prefect server start --host 0.0.0.0 --port 4200
-    environment:
-      PREFECT_ORION_API_HOST: 0.0.0.0
-      PREFECT_ORION_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
+    command: prefect server start --host 0.0.0.0
     ports:
-      - 4200:4200
-    depends_on:
-      - postgres
+      - "4200:4200"  # UI
+      - "4201:4201"  # API
+    environment:
+      PREFECT_UI_URL: http://localhost:4200
+    restart: unless-stopped
 
   prefect-agent:
     build:
@@ -32,13 +16,30 @@ services:
       args:
         PYTHON_VERSION: ${PYTHON_VERSION}
         PREFECT_VERSION: ${PREFECT_VERSION}
-    command: sh -c "sleep 10 && prefect worker start --pool default"
+    command: prefect agent start --work-queue default
     environment:
-      PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_API_URL: http://prefect-server:4201/api
     depends_on:
       - prefect-server
     volumes:
-      - ./flows:/flows
+      - .:/app
+    working_dir: /app
+    restart: unless-stopped
 
-volumes:
-  postgres_data:
+  streamlit:
+    build:
+      context: .
+      dockerfile: docker/streamlit/Dockerfile
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION}
+    command: streamlit run streamlit_app.py
+    ports:
+      - "8501:8501"
+    depends_on:
+      - prefect-server
+    environment:
+      PREFECT_API_URL: http://prefect-server:4201/api
+    volumes:
+      - .:/app  # Optional, needed if your app loads flows or data from the repo
+    working_dir: /app  # Ensures relative paths in Streamlit work correctly
+    restart: unless-stopped

@@ -85,45 +85,38 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
         ticker = command["ticker"]
         interval = command["interval"]
-
         api_token = cfg.EODHD_API_TOKEN
 
         if interval in INTRADAY_FREQUENCIES:
             data_type = "intraday"
-            if "start" not in command or "end" not in command:
-                raise ValueError("Intraday data requires 'start' and 'end' in 'YYYY-MM-DD HH:MM' format.")
-
             start = self._to_unix_utc(command["start"])
             end = self._to_unix_utc(command["end"])
-
             url = (
                 f"https://eodhd.com/api/intraday/{ticker}?api_token={api_token}"
                 f"&interval={interval}&from={start}&to={end}&fmt=json"
             )
-
             expected_dict = cfg.EODHD_INTRADAY_HISTORICAL_EXPECTED_DICT
 
         elif interval in INTERDAY_FREQUENCIES:
             data_type = "interday"
-            if "start" not in command or "end" not in command:
-                raise ValueError("Daily/monthly data requires 'start' and 'end' in 'YYYY-MM-DD HH:MM' format.")
-
             start = self._to_iso_date(command["start"])
             end = self._to_iso_date(command["end"])
-
             url = (
                 f"https://eodhd.com/api/eod/{ticker}?api_token={api_token}"
                 f"&period={interval}&from={start}&to={end}&fmt=json"
             )
-
             expected_dict = cfg.EODHD_INTERDAY_HISTORICAL_EXPECTED_DICT
 
         else:
             raise ValueError(f"Unknown interval type: {interval}")
+
+        logger.info("Prepared historical task: type=%s ticker=%s interval=%s", data_type, ticker, interval)
 
         task = asyncio.get_running_loop().create_task(self._fetch_data(url, expected_dict, data_type, ticker))
         self.tasks.append(task)
         return task
 
     async def wait_for_all(self):
+        logger.info("Awaiting completion of all historical tasks...")
         await asyncio.gather(*self.tasks, return_exceptions=True)
+        logger.info("All historical tasks completed.")
