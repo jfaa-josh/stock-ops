@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime
 
 import websockets
@@ -15,6 +16,8 @@ from stockops.data.sql_db import WriterRegistry
 from stockops.data.utils import get_db_filepath
 
 from .base_streaming_service import AbstractStreamingService
+
+logger = logging.getLogger(__name__)
 
 
 class EODHDStreamingService(AbstractStreamingService):
@@ -27,14 +30,14 @@ class EODHDStreamingService(AbstractStreamingService):
 
         writer_cache = {}
         try:
-            end_time = asyncio.get_event_loop().time() + duration
-            while asyncio.get_event_loop().time() < end_time:
+            end_time = asyncio.get_running_loop().time() + duration
+            while asyncio.get_running_loop().time() < end_time:
                 try:
-                    print(f"Connecting to {ws_url}")
+                    logger.info("Connecting to %s", ws_url)
                     async with websockets.connect(ws_url) as websocket:
                         subscribe_msg = {"action": "subscribe", "symbols": ",".join(symbols)}
                         await websocket.send(json.dumps(subscribe_msg))
-                        print(f"Subscribed to {symbols} on {ws_url}")
+                        logger.info("Subscribed to %s on %s", symbols, ws_url)
 
                         async for message in websocket:
                             try:
@@ -42,13 +45,12 @@ class EODHDStreamingService(AbstractStreamingService):
                                 table_name = data["s"]
 
                                 if "status_code" in data and "message" in data:
-                                    print(f"[{table_name}] Handshake: {data}")
+                                    logger.info("[%s] Handshake: %s", table_name, data)
                                     continue
 
                                 if expected_keys.issubset(data):
                                     ts = datetime.fromtimestamp(data["t"] / 1000, UTC)
 
-                                    # Dynamically compute db_path and writer
                                     db_path = get_db_filepath("streaming", "EODHD", ts, RAW_STREAMING_DIR)
                                     writer_key = (db_path, table_name)
 
@@ -56,9 +58,9 @@ class EODHDStreamingService(AbstractStreamingService):
                                         writer_cache[writer_key] = WriterRegistry.get_writer(db_path, table_name)
 
                                     await writer_cache[writer_key].write(data)
-                                    print(f"[{table_name}] {data}")
+                                    logger.info("[%s] %s", table_name, data)
                                 else:
-                                    print(f"[{table_name}] Ignored non-trade message: {data}")
+                                    logger.debug("[%s] Ignored non-trade message: %s", table_name, data)
 
                             except json.JSONDecodeError:
                                 safe_message = (
@@ -66,17 +68,17 @@ class EODHDStreamingService(AbstractStreamingService):
                                     if isinstance(message, bytes)
                                     else str(message)
                                 )
-                                print(f"[{table_name}] Warning: Non-JSON message: {safe_message}")
+                                logger.warning("[%s] Warning: Non-JSON message: %s", table_name, safe_message)
 
                             except Exception as e:
-                                print(f"[{table_name}] Error: {e}")
+                                logger.error("[%s] Error during message processing: %s", table_name, e)
 
                 except Exception as e:
-                    print(f"[{table_name}] Connection error: {e} — retrying in 5 seconds.")
+                    logger.warning("[%s] Connection error: %s — retrying in 5 seconds.", table_name, e)
                     await asyncio.sleep(5)
 
         except asyncio.CancelledError:
-            print(f"[{table_name}] Stream cancelled.")
+            logger.info("[%s] Stream cancelled.", table_name)
 
     def start_stream(self, command: dict):
         required_keys = ["tickers", "duration", "stream_type"]
@@ -99,10 +101,11 @@ class EODHDStreamingService(AbstractStreamingService):
 
         task = asyncio.get_running_loop().create_task(self._stream_data(url, expected_dict, tickers, duration))
         self.tasks.append(task)
+        return task
 
     async def stop_all_streams(self):
-        print("Stopping all streams...")
+        logger.info("Stopping all streams...")
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
-        print("All streams stopped.")
+        logger.info("All streams stopped.")

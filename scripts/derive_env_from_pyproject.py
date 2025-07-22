@@ -1,59 +1,60 @@
 #!/usr/bin/env python
-import tomllib
+import pathlib
 
 ENV_PATH = ".env"
-KEYS_TO_UPDATE = {"PYTHON_VERSION", "AIRFLOW_VERSION"}
 
-# Step 1: Parse pyproject.toml
-with open("pyproject.toml", "rb") as f:
-    config = tomllib.load(f)
+def get_python_version_truncated():
+    with open(".python-version", "r") as f:
+        full_version = f.read().strip()
+    return ".".join(full_version.split(".")[:2])  # e.g., "3.13.5" → "3.13"
 
-python_spec = config["project"]["requires-python"]
-python_version = python_spec.strip("><=~^").split(",")[0]
-python_version = ".".join(python_version.split(".")[:2])
+def get_prefect_version(pyproject_path: str = "pyproject.toml"):
+    import tomllib
+    with open(pyproject_path, "rb") as f:
+        config = tomllib.load(f)
+    for dep in config["project"]["dependencies"]:
+        if dep.startswith("prefect"):
+            parts = dep.split("==")
+            if len(parts) == 2:
+                return parts[1]
+    return None
 
-airflow_version = None
-for dep in config["project"]["dependencies"]:
-    if dep.startswith("apache-airflow"):
-        parts = dep.split("==")
-        if len(parts) == 2:
-            airflow_version = parts[1]
-        break
+def update_env_file(python_version: str, prefect_version: str | None):
+    try:
+        with open(ENV_PATH, "r") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        lines = []
 
-# Step 2: Read existing .env lines
-try:
-    with open(ENV_PATH, "r") as f:
-        lines = f.readlines()
-except FileNotFoundError:
-    lines = []
+    new_lines = []
+    found_keys = set()
 
-# Step 3: Build updated lines
-new_lines = []
-found_keys = set()
+    for line in lines:
+        if "=" not in line or line.strip().startswith("#"):
+            new_lines.append(line)
+            continue
 
-for line in lines:
-    if "=" not in line or line.strip().startswith("#"):
-        new_lines.append(line)
-        continue
+        key, _, _ = line.partition("=")
+        key = key.strip()
 
-    key, _, value = line.partition("=")
-    key = key.strip()
+        if key == "PYTHON_VERSION":
+            new_lines.append(f"PYTHON_VERSION={python_version}\n")
+            found_keys.add(key)
+        elif key == "PREFECT_VERSION" and prefect_version:
+            new_lines.append(f"PREFECT_VERSION={prefect_version}\n")
+            found_keys.add(key)
+        else:
+            new_lines.append(line)
 
-    if key == "PYTHON_VERSION":
+    if "PYTHON_VERSION" not in found_keys:
         new_lines.append(f"PYTHON_VERSION={python_version}\n")
-        found_keys.add("PYTHON_VERSION")
-    elif key == "AIRFLOW_VERSION" and airflow_version:
-        new_lines.append(f"AIRFLOW_VERSION={airflow_version}\n")
-        found_keys.add("AIRFLOW_VERSION")
-    else:
-        new_lines.append(line)
+    if prefect_version and "PREFECT_VERSION" not in found_keys:
+        new_lines.append(f"PREFECT_VERSION={prefect_version}\n")
 
-# Step 4: Append missing keys
-if "PYTHON_VERSION" not in found_keys:
-    new_lines.append(f"PYTHON_VERSION={python_version}\n")
-if airflow_version and "AIRFLOW_VERSION" not in found_keys:
-    new_lines.append(f"AIRFLOW_VERSION={airflow_version}\n")
+    with open(ENV_PATH, "w") as f:
+        f.writelines(new_lines)
 
-# Step 5: Write back to .env
-with open(ENV_PATH, "w") as f:
-    f.writelines(new_lines)
+if __name__ == "__main__":
+    python_version = get_python_version_truncated()
+    prefect_version = get_prefect_version()
+    update_env_file(python_version, prefect_version)
