@@ -25,8 +25,7 @@ jobs:
         run: pip install uv
 
       - name: Install just
-        run: |
-          curl -sL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        uses: extractions/setup-just@v3
 
       - name: Validate Python version match
         run: ./scripts/validate_python_version.sh

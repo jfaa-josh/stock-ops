@@ -23,9 +23,13 @@ mypy:
     uv run mypy
 
 test:
-    uv run pytest
+    uv run pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
 
 generate-structure-doc:
+  if ! command -v tree &> /dev/null; then \
+    echo "'tree' not found. Installing..."; \
+    sudo apt-get update && sudo apt-get install -y tree; \
+  fi
   mkdir -p docs
   echo "# Repository Structure" > docs/structure.md
   echo "" >> docs/structure.md
@@ -43,5 +47,6 @@ generate-structure-doc:
 docker-build:
   chmod +x scripts/derive_env_from_pyproject.py
   ./scripts/derive_env_from_pyproject.py
-  docker compose build controller airflow-api-server airflow-scheduler
-  if [ "${CI:-}" = "true" ]; then rm .env; fi # Only remove .env in CI to avoid issues with local development
+  test -f .env || (echo ".env not found after derive_env_from_pyproject.py" && exit 1)
+  docker compose build postgres prefect-server prefect-agent
+  if [ "${CI:-}" = "true" ]; then rm .env; fi
