@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+
+ARG PYTHON_VERSION
+ARG PREFECT_VERSION
+FROM prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
+
+# Set working directory in image
+WORKDIR /app
+
+# Install useful debugging tool
+RUN apt-get update && apt-get install -y curl && apt-get clean
+
+# Copy dependency files only (to take advantage of layer caching)
+COPY pyproject.toml uv.lock README.md ./
+
+# Install your package (and core deps only) at build time
+RUN pip install uv && uv pip install --system prefect
+
+# Entrypoint: migrate → start API/services → wait for health → deploy → stay up
+ENTRYPOINT ["bash","-c","\
+  set -euo pipefail; \
+  echo '🛠  Migrating database…'; \
+  prefect server database upgrade --yes; \
+  echo '🚀  Starting Prefect API…'; \
+  prefect server start & PID=$!; \
+  echo '⏳  Waiting for API…'; \
+  until curl -sSf http://localhost:4200/api/health > /dev/null; do sleep 1; done; \
+  # echo '💧  Ensuring default work pool exists…'; \
+  # prefect work-pool create default --type process || echo 'default pool exists'; \
+  # echo '🔧  Registering deployment…'; \
+  # python /app/prefect/data_pipeline_flow.py; \
+  wait $PID \
+"]

@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+
+ARG PYTHON_VERSION
+FROM python:${PYTHON_VERSION}-slim
+
+WORKDIR /app
+
+# Optional: helpful for debugging inside container
+RUN apt-get update && apt-get install -y curl && apt-get clean
+
+# Copy only what's needed to install dependencies
+COPY pyproject.toml uv.lock ./
+
+RUN pip install uv
+
+# Copy the helper script
+COPY scripts/install_ui_deps.py ./scripts/install_ui_deps.py
+
+# Install dependencies for ui only -> dynamically grab the ui deps and install them (avoids importing the whole repo)
+RUN python3 scripts/install_ui_deps.py
+
+# Copy only needed scripts and files
+COPY ui/ ./ui/
+COPY prefect/ ./prefect/
