@@ -88,27 +88,6 @@ class AsyncSQLiteWriter:
         self.writer.close()
 
 
-class WriterRegistry:
-    """
-    A global registry to ensure a single AsyncSQLiteWriter exists per (db_path, table_name).
-    All services and tasks should use this registry to obtain a writer.
-    """
-
-    _writers: dict[str, AsyncSQLiteWriter] = {}
-
-    @classmethod
-    def get_writer(cls, db_path: Path, table_name: str) -> AsyncSQLiteWriter:
-        key = f"{db_path.resolve()}::{table_name}"
-        if key not in cls._writers:
-            cls._writers[key] = AsyncSQLiteWriter(db_path, table_name)
-        return cls._writers[key]
-
-    @classmethod
-    async def shutdown_all(cls) -> None:
-        await asyncio.gather(*(writer.shutdown() for writer in cls._writers.values()))
-        cls._writers.clear()
-
-
 class SQLiteReader:
     def __init__(self, db_path: Path):
         self.db_path = db_path

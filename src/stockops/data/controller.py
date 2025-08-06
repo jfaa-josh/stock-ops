@@ -19,25 +19,23 @@ class Controller:
         self.streaming_service = streaming_service
         self.historical_service = historical_service
 
+        if bool(self.streaming_service) == bool(self.historical_service):
+            raise ValueError("Exactly one of streaming_service or historical_service must be provided.")
+
     async def __call__(self) -> None:
         logger.info("Controller: received command %r", self.command)
         try:
-            typ = self.command.get("type")
-
-            if typ == "start_stream":
-                if not self.streaming_service:
-                    raise ValueError("Streaming service not provided for start_stream command")
+            if self.streaming_service:
                 logger.info("Starting streaming task")
                 result: Any = self.streaming_service.start_stream(self.command)
 
-            elif typ == "fetch_historical":
-                if not self.historical_service:
-                    raise ValueError("Historical service not provided for fetch_historical command")
+            elif self.historical_service:
                 logger.info("Starting historical task")
                 result = self.historical_service.start_historical_task(self.command)
 
             else:
-                raise ValueError(f"Unknown command type: {typ}")
+                # Defensive fallback; should never happen due to __init__ check
+                raise ValueError("No service provided to execute the command.")
 
             if result is not None and asyncio.iscoroutine(result):
                 logger.info("Awaiting asynchronous result")

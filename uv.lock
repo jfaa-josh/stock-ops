@@ -1217,7 +1217,7 @@ wheels = [
 
 [[package]]
 name = "prefect"
-version = "3.4.8"
+version = "3.4.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1274,9 +1274,9 @@ dependencies = [
     { name = "websockets" },
     { name = "whenever" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/f4/712ba6ce86195016d159f3def1e446d1674029d388326214d71941130f7b/prefect-3.4.8.tar.gz", hash = "sha256:bbcc92c9c5589ffb165e490f9a535f9839009264ba37b93abaf1284ae725b73d", size = 5569345, upload-time = "2025-07-10T17:50:17.993Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/de/21/4c6154f33c925583bb9ef739476cd65c612ec24ccf79aa79ab26549e9276/prefect-3.4.10.tar.gz", hash = "sha256:fa1e2a3ef5370ffcf29d3ba141163a56e8bfbc3a0d4bc579c812492ce81a05a2", size = 5576493, upload-time = "2025-07-22T19:36:23.979Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ae/16/4967ea97e743bf398913bf6a2a95f110e9c4c4648e88171aba97c2b7f375/prefect-3.4.8-py3-none-any.whl", hash = "sha256:72c89645b5ad7391c6595d0c0e59ed3d2ea78a340eed163a77ddca788c962b2e", size = 6067976, upload-time = "2025-07-10T17:50:15.221Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/0f/0b395396dd4dbe0b9119cd527b5aa2c1248970cb00b8f91302e22231a37c/prefect-3.4.10-py3-none-any.whl", hash = "sha256:d5e483f11fcaec6c1fe33938f8d3e53721985390f2324de52f405f6dfac861a3", size = 6079105, upload-time = "2025-07-22T19:36:21.735Z" },
 ]
 
 [[package]]
@@ -1898,15 +1898,20 @@ wheels = [
 [[package]]
 name = "stocks-ops"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "prefect" },
-    { name = "streamlit" },
     { name = "websockets" },
+]
+
+[package.optional-dependencies]
+ui = [
+    { name = "requests" },
+    { name = "streamlit" },
 ]
 
 [package.dev-dependencies]
@@ -1917,7 +1922,9 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "ruff" },
+    { name = "streamlit" },
     { name = "types-requests" },
 ]
 
@@ -1927,10 +1934,12 @@ requires-dist = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
-    { name = "prefect", specifier = "==3.4.8" },
-    { name = "streamlit" },
+    { name = "prefect", specifier = "==3.4.10" },
+    { name = "requests", marker = "extra == 'ui'" },
+    { name = "streamlit", marker = "extra == 'ui'" },
     { name = "websockets" },
 ]
+provides-extras = ["ui"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1940,7 +1949,9 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "ruff" },
+    { name = "streamlit" },
     { name = "types-requests" },
 ]
 

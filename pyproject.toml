@@ -13,8 +13,14 @@ dependencies = [
     "pandas",
     "websockets",
     "aiohttp",
-    "prefect==3.4.8",
-    "streamlit",
+    "prefect==3.4.10",
+]
+
+# These are split out to avoid docker bloat
+[project.optional-dependencies]
+ui = [
+  "streamlit",
+  "requests"
 ]
 
 [dependency-groups]
@@ -27,11 +33,11 @@ dev = [
     "pytest-cov",
     "pytest-asyncio",
     "python-dotenv",
-]
 
-# [build-system]
-# requires = ["maturin>=1.0,<2.0"]
-# build-backend = "maturin"
+    # These are repeated here for local dev only to avoid errors
+    "streamlit",
+    "requests",
+]
 
 [tool.ruff]
 line-length = 120
@@ -77,3 +83,19 @@ mypy_path = ["src", "tests"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+# [build-system]
+# requires = ["maturin>=1.0,<2.0"]
+# build-backend = "maturin"
+
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# tell setuptools “all our packages live under src/”
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+# look for any packages under src/
+where = ["src"]
