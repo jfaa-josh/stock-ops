@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import aiohttp
 
 from stockops.config import eodhd_config as cfg
+from stockops.data.transform import TransformData
 
 from .base_historical_service import AbstractHistoricalService
 
@@ -28,7 +29,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
     async def _fetch_data(self, ws_url: str, exp_data: dict, data_type: str, table_name: str):
         expected_keys = set(exp_data)
-        table_name = "No Ticker Set"
+        transform = TransformData("EODHD", f"historical_{data_type}")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -38,9 +39,11 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
                         if isinstance(data, list):
                             for row in data:
-                                if expected_keys.issubset(data):
+                                if expected_keys.issubset(row):
                                     # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
                                     logger.debug("[%s] Received data: %s", table_name, row)
+                                    transformed_row = transform(row)
+                                    print(transformed_row)
                                 else:
                                     logger.debug("[%s] Ignored non-trade message: %s", table_name, row)
 
@@ -48,6 +51,8 @@ class EODHDHistoricalService(AbstractHistoricalService):
                             if expected_keys.issubset(data):
                                 # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
                                 logger.debug("[%s] Received data: %s", table_name, data)
+                                transformed_row = transform(data)
+                                print(transformed_row)
                             else:
                                 logger.debug("[%s] Ignored non-trade message: %s", table_name, data)
 

@@ -83,9 +83,11 @@ services:
     depends_on:
       prefect-server:
         condition: service_healthy                    # Wait until Prefect server is healthy
+
     environment:                                      # Prefect configuration variables
       <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api # API URL for the worker to pull jobs
+      DB_DATA_DIR: /app/data                          # Define a variable to reference in src config for local .db storage directory
     command: >                                        # Create default pool (if missing); Start a forever-running worker polling 'default':
       bash -c "
         prefect work-pool create default --type process --set-as-default || true &&
@@ -97,6 +99,8 @@ services:
       timeout: 5s                                     # Timeout each check after 5 seconds
       retries: 5                                      # Retry up to 5 times before marking unhealthy
       start_period: 10s                               # Wait 10 seconds before starting health checks
+    volumes:
+      - ./data:/app/data                              # bind local data directory for .db file storage in the container
 
   streamlit:                                          # Streamlit UI container
     build:
