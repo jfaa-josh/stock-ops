@@ -25,9 +25,5 @@ ENTRYPOINT ["bash","-c","\
   prefect server start & PID=$!; \
   echo '⏳  Waiting for API…'; \
   until curl -sSf http://localhost:4200/api/health > /dev/null; do sleep 1; done; \
-  # echo '💧  Ensuring default work pool exists…'; \
-  # prefect work-pool create default --type process || echo 'default pool exists'; \
-  # echo '🔧  Registering deployment…'; \
-  # python /app/prefect/data_pipeline_flow.py; \
   wait $PID \
 "]

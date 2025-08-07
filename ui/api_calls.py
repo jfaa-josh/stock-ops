@@ -110,19 +110,12 @@ class APIBackend:
         response = self.send(url, payload, headers)
         return response
 
-    def run_deployed_flow(self, deployment_id: str,
-                          ticker: str, interval: str, start: str, end: str,
-                          command_type: str, provider: str):
-
+    def run_deployed_flow(self, deployment_id: str, provider: str, command_type: str,
+                          command: dict):
         url = f"{self.api_url}/deployments/{deployment_id}/create_flow_run"
         payload = {
             "parameters": {
-                "command": {
-                    "ticker": ticker,
-                    "interval": interval,
-                    "start": start,
-                    "end": end
-                },
+                "command": command,
                 "command_type": command_type,
                 "provider": provider
             }

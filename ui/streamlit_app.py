@@ -51,30 +51,23 @@ if st.button("Run Historical SPY"):
             interval = '1m'
             start = '2025-07-02 09:30'
             end = '2025-07-02 16:00'
-            command_type = 'fetch_historical'
+            # command_type = 'fetch_historical'
+            command_type = 'start_stream'
             provider = 'EODHD'
-            response = api.run_deployed_flow(deployment_id, ticker, interval,
-                                            start, end, command_type, provider)
+            stream_type = "trades"
+            duration = 10
+
+        #  FIX TICKER SO THAT I COULD PASS IN A LIST BUT DONT MAKE THIS ALL HARD CODED TO EODHD's NEEDS!!!
+
+            if command_type == 'fetch_historical':
+                command = {"ticker": ticker, "interval": interval, "start": start, "end": end}
+            elif command_type == 'start_stream':
+                ticker = [ticker.split('.')[0]]
+                command = {"stream_type": stream_type, "tickers": ticker, "duration": duration}
+
+            response = api.run_deployed_flow(deployment_id, provider, command_type, command)
             flow_run_name = response['name']
     except Exception as e:
         logger.exception("Failed to trigger historical SPY flow")
         st.error("Flow trigger failed.")
         st.exception(e)
-
-# if st.button("Run Stream SPY"):
-#     logger.info("Button pressed: Run Stream SPY")
-#     try:
-#         result = api.trigger_flow(
-#             command_type="start_stream",
-#             command_payload={
-#                 "stream_type": "trades",
-#                 "tickers": ["SPY"],
-#                 "duration": 10
-#             },
-#             provider="EODHD"
-#         )
-#         st.json(result)
-#     except Exception as e:
-#         logger.exception("Failed to trigger streaming SPY flow")
-#         st.error("Flow trigger failed.")
-#         st.exception(e)

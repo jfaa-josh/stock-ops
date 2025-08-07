@@ -3,6 +3,7 @@
 @author: JoshFody
 """
 
+import os
 from pathlib import Path
 
 # root level
@@ -14,10 +15,15 @@ SRC_DIR = ROOT_DIR / "src"
 # stockops level
 PKG_DIR = SRC_DIR / "stockops"
 
-## Data Directory
-DATA_DIR = ROOT_DIR / "data"
 
-DATA_DB_DATESTR = "%Y-%m-%d_%H%M%S"
+## Data Directory
+def get_data_path(default_local):  # Switch for docker vs local
+    return Path(os.environ.get("DB_DATA_DIR", default_local))
+
+
+DATA_DIR = get_data_path(ROOT_DIR / "data")
+
+DATA_DB_DATESTR = "%Y-%m-%d %H:%M:%S %Z%z"
 
 ### Streaming
 RAW_STREAMING_DIR = DATA_DIR / "raw" / "streaming"

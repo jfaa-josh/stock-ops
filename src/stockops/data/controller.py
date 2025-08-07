@@ -1,6 +1,4 @@
-import asyncio
 import logging
-from typing import Any
 
 from stockops.data.historical.base_historical_service import AbstractHistoricalService
 from stockops.data.streaming.base_streaming_service import AbstractStreamingService
@@ -27,7 +25,7 @@ class Controller:
         try:
             if self.streaming_service:
                 logger.info("Starting streaming task")
-                result: Any = self.streaming_service.start_stream(self.command)
+                result = self.streaming_service.start_stream(self.command)
 
             elif self.historical_service:
                 logger.info("Starting historical task")
@@ -37,7 +35,8 @@ class Controller:
                 # Defensive fallback; should never happen due to __init__ check
                 raise ValueError("No service provided to execute the command.")
 
-            if result is not None and asyncio.iscoroutine(result):
+            logger.info("start_stream returned %r (type %s)", result, type(result))
+            if result is not None:
                 logger.info("Awaiting asynchronous result")
                 await result
                 logger.info("Asynchronous result complete")

@@ -45,8 +45,15 @@ def controller_driver_flow(
 
     run_controller_task(command, command_type, provider)
 
-command = {'ticker': 'SPY.US', 'interval': '1m', 'start': '2025-07-02 09:30', 'end': '2025-07-02 16:00'}
-command_type = 'fetch_historical'
 provider = 'EODHD'
+
+# command = {'ticker': 'SPY.US', 'interval': '1m', 'start': '2025-07-02 09:30', 'end': '2025-07-02 16:00'}
+# command_type = 'fetch_historical'
+# command = {'ticker': 'SPY.US', 'interval': 'd', 'start': '2025-07-02 09:30', 'end': '2025-07-02 16:00'}
+# command_type = 'fetch_historical'
+# command_type="start_stream"
+# command = {"stream_type": "trades", "tickers": ['SPY'], "duration": 10}
+command_type="start_stream"
+command = {"stream_type": "quotes", "tickers": ['SPY'], "duration": 10}
 
 controller_driver_flow(command, command_type, provider)

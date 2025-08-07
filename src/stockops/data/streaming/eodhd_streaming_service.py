@@ -10,6 +10,7 @@ import logging
 import websockets
 
 from stockops.config import eodhd_config as cfg
+from stockops.data.transform import TransformData
 
 from .base_streaming_service import AbstractStreamingService
 
@@ -18,11 +19,16 @@ logger = logging.getLogger(__name__)
 
 class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
-        self.tasks: list[asyncio.Task] = []
+        self.tasks = []
 
-    async def _stream_data(self, ws_url: str, exp_data: dict, symbols: list[str], duration: int):
+    async def _stream_data(self, ws_url: str, exp_data: dict, stream_type: str, symbols: list[str], duration: int):
         expected_keys = set(exp_data)
         table_name = "No Ticker Set"
+        transform = TransformData("EODHD", f"streaming_{stream_type}")
+
+        assert len(symbols) == 1, (
+            "Please modify eodhd_streaming_service:_stream_data code to loop over multiple tickers..."
+        )
 
         try:
             end_time = asyncio.get_running_loop().time() + duration
@@ -37,15 +43,17 @@ class EODHDStreamingService(AbstractStreamingService):
                         async for message in websocket:
                             try:
                                 data = json.loads(message)
-                                table_name = data["s"]
 
                                 if "status_code" in data and "message" in data:
                                     logger.info("[%s] Handshake: %s", table_name, data)
                                     continue
 
                                 if expected_keys.issubset(data):
+                                    table_name = data["s"]
                                     # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
                                     logger.debug("[%s] Received data: %s", table_name, data)
+                                    transformed_row = transform(data)
+                                    print(transformed_row)
                                 else:
                                     logger.debug("[%s] Ignored non-trade message: %s", table_name, data)
 
@@ -86,7 +94,9 @@ class EODHDStreamingService(AbstractStreamingService):
         else:
             raise ValueError(f"Unknown stream type: {stream_type}")
 
-        task = asyncio.get_running_loop().create_task(self._stream_data(url, expected_dict, tickers, duration))
+        task = asyncio.get_running_loop().create_task(
+            self._stream_data(url, expected_dict, stream_type, tickers, duration)
+        )
         self.tasks.append(task)
         return task
 
