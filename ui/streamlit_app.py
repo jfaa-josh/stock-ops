@@ -51,8 +51,8 @@ if st.button("Run Historical SPY"):
             interval = '1m'
             start = '2025-07-02 09:30'
             end = '2025-07-02 16:00'
-            # command_type = 'fetch_historical'
-            command_type = 'start_stream'
+            command_type = 'fetch_historical'
+            # command_type = 'start_stream'
             provider = 'EODHD'
             stream_type = "trades"
             duration = 10

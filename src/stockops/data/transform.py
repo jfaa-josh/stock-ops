@@ -1,6 +1,9 @@
+import logging
 from datetime import UTC, datetime, timedelta, timezone
 
 from stockops.config import config as cfg
+
+logger = logging.getLogger(__name__)
 
 
 class TransformData:
@@ -57,42 +60,63 @@ class TransformData:
             # "datetime": "UTC datetime string YYYY-MM-DD HH:MM:SS for the start of the interval"
             # CONVERT TO MID POINT AND DOCUMENT
 
+            required_keys = {"timestamp", "gmtoffset", "open", "high", "low", "close", "volume"}
+
+            missing = required_keys - data_row.keys()
+            if missing:
+                logger.debug("Missing expected fields in historical_intraday EODHD data: %s", missing)
+                raise
+
             transformed = {
                 "datetime_UTC": get_UTC_intraday(data_row["timestamp"], data_row["gmtoffset"]),
-                "open": data_row["open"],
-                "high": data_row["high"],
-                "low": data_row["low"],
-                "close": data_row["close"],
-                "volume": data_row["volume"],
+                **{k: data_row[k] for k in ("open", "high", "low", "close", "volume")},
             }
+
         elif self.data_type == "historical_interday":
             # "date": "UTC datetime string YYYY-MM-DD for the end of the interval"
             # CONVERT TO MID POINT AND DOCUMENT
 
             gmtoffset = -14400  # THIS IS NOT CORRECT!!!
 
+            required_keys = {"date", "open", "high", "low", "close", "adjusted_close", "volume"}
+
+            missing = required_keys - data_row.keys()
+            if missing:
+                logger.debug("Missing expected fields in historical_interday EODHD data: %s", missing)
+                raise
+
             transformed = {
                 "datetime_UTC": get_UTC_interday(data_row["date"], gmtoffset),
-                "open": data_row["open"],
-                "high": data_row["high"],
-                "low": data_row["low"],
-                "close": data_row["close"],
-                "adjusted_close": data_row["adjusted_close"],
-                "volume": data_row["volume"],
+                **{k: data_row[k] for k in ("open", "high", "low", "close", "adjusted_close", "volume")},
             }
+
         elif self.data_type == "streaming_trades":
             # "datetime": "UTC datetime string YYYY-MM-DD HH:MM:SS for the start of the interval"
             # CONVERT TO MID POINT AND DOCUMENT
+
+            required_keys = {"t", "p", "v"}
+
+            missing = required_keys - data_row.keys()
+            if missing:
+                logger.debug("Missing expected fields in streaming_trades EODHD data: %s", missing)
+                raise
 
             transformed = {
                 "datetime_UTC": UTC_timestamp_ms(data_row["t"], 0),  # Converting milliseconds to fractional seconds
                 "price": data_row["p"],
                 "volume": data_row["v"],
-                "market_status": data_row["ms"],
             }
+
         elif self.data_type == "streaming_quotes":
             # "datetime": "UTC datetime string YYYY-MM-DD HH:MM:SS for the start of the interval"
             # CONVERT TO MID POINT AND DOCUMENT
+
+            required_keys = {"t", "ap", "bp", "as", "bs"}
+
+            missing = required_keys - data_row.keys()
+            if missing:
+                logger.debug("Missing expected fields in streaming_quotes EODHD data: %s", missing)
+                raise
 
             transformed = {
                 "datetime_UTC": UTC_timestamp_ms(data_row["t"], 0),  # Converting milliseconds to fractional seconds

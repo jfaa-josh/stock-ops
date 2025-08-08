@@ -9,6 +9,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+# NEED TO DESYNC THIS!!!!!
 # MAKE SURE I SAVE INTERVAL LENGTH TO THE DB FOR HISTORICAL!!!
 # intraday_{self.provider}_{year_str}_{month_str}:
 #     table = ticker name (in format SPY.US)

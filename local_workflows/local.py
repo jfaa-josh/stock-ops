@@ -1,6 +1,5 @@
 import logging
 from typing import Any, Dict
-import asyncio
 import sys
 
 from stockops.data.historical.providers import get_historical_service
@@ -29,7 +28,7 @@ def run_controller_task(command: Dict[str, Any], command_type: str, provider: st
         else:
             raise ValueError(f"Unsupported command type: {command_type}")
 
-        asyncio.run(controller())
+        controller()
         logger.info("Controller finished for command: %s", command)
 
     except Exception:
@@ -51,9 +50,9 @@ provider = 'EODHD'
 # command_type = 'fetch_historical'
 # command = {'ticker': 'SPY.US', 'interval': 'd', 'start': '2025-07-02 09:30', 'end': '2025-07-02 16:00'}
 # command_type = 'fetch_historical'
-# command_type="start_stream"
-# command = {"stream_type": "trades", "tickers": ['SPY'], "duration": 10}
 command_type="start_stream"
-command = {"stream_type": "quotes", "tickers": ['SPY'], "duration": 10}
+command = {"stream_type": "trades", "tickers": ['SPY'], "duration": 10}
+# command_type="start_stream"
+# command = {"stream_type": "quotes", "tickers": ['SPY'], "duration": 10}
 
 controller_driver_flow(command, command_type, provider)
