@@ -1,6 +1,5 @@
 import logging
 from typing import Any, Dict
-import asyncio
 
 from prefect import flow, task, get_run_logger
 from stockops.data.historical.providers import get_historical_service
@@ -25,7 +24,7 @@ def run_controller_task(command: Dict[str, Any], command_type: str, provider: st
         else:
             raise ValueError(f"Unsupported command type: {command_type}")
 
-        asyncio.run(controller())
+        controller()
         logger.info("Controller finished for command: %s", command)
 
     except Exception:

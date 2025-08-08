@@ -1,8 +1,3 @@
-"""Created on Sun Jun 15 15:35:25 2025
-
-@author: JoshFody
-"""
-
 import asyncio
 import json
 import logging
@@ -19,10 +14,9 @@ logger = logging.getLogger(__name__)
 
 class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
-        self.tasks = []
+        pass
 
-    async def _stream_data(self, ws_url: str, exp_data: dict, stream_type: str, symbols: list[str], duration: int):
-        expected_keys = set(exp_data)
+    async def _stream_data(self, ws_url: str, stream_type: str, symbols: list[str], duration: int):
         table_name = "No Ticker Set"
         transform = TransformData("EODHD", f"streaming_{stream_type}")
 
@@ -31,49 +25,50 @@ class EODHDStreamingService(AbstractStreamingService):
         )
 
         try:
-            end_time = asyncio.get_running_loop().time() + duration
-            while asyncio.get_running_loop().time() < end_time:
-                try:
-                    logger.info("Connecting to %s", ws_url)
-                    async with websockets.connect(ws_url) as websocket:
-                        subscribe_msg = {"action": "subscribe", "symbols": ",".join(symbols)}
-                        await websocket.send(json.dumps(subscribe_msg))
-                        logger.info("Subscribed to %s on %s", symbols, ws_url)
+            logger.info("Connecting to %s", ws_url)
+            async with websockets.connect(ws_url) as websocket:
+                subscribe_msg = {"action": "subscribe", "symbols": ",".join(symbols)}
+                await websocket.send(json.dumps(subscribe_msg))
+                logger.info("Subscribed to %s on %s", symbols, ws_url)
 
-                        async for message in websocket:
-                            try:
-                                data = json.loads(message)
+                async with asyncio.timeout(duration):
+                    async for message in websocket:
+                        try:
+                            data = json.loads(message)
 
-                                if "status_code" in data and "message" in data:
-                                    logger.info("[%s] Handshake: %s", table_name, data)
-                                    continue
+                            if "status_code" in data and "message" in data:
+                                logger.info("[%s] Handshake: %s", table_name, data)
+                                continue
 
-                                if expected_keys.issubset(data):
-                                    table_name = data["s"]
-                                    # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
-                                    logger.debug("[%s] Received data: %s", table_name, data)
-                                    transformed_row = transform(data)
-                                    print(transformed_row)
-                                else:
-                                    logger.debug("[%s] Ignored non-trade message: %s", table_name, data)
+                            if "s" not in data:
+                                logger.warning("Warning: No ticker in data row, ignoring...")
+                                continue
+                            else:
+                                table_name = data["s"]
+                                # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
+                                logger.debug("[%s] Received data: %s", table_name, data)
+                                transformed_row = transform(data)
+                                print(transformed_row)
 
-                            except json.JSONDecodeError:
-                                safe_message = (
-                                    message.decode("utf-8", errors="replace")
-                                    if isinstance(message, bytes)
-                                    else str(message)
-                                )
-                                logger.warning("[%s] Warning: Non-JSON message: %s", table_name, safe_message)
+                        except json.JSONDecodeError:
+                            safe_message = (
+                                message.decode("utf-8", errors="replace")
+                                if isinstance(message, bytes)
+                                else str(message)
+                            )
+                            logger.warning("[%s] Warning: Non-JSON message: %s", table_name, safe_message)
 
-                            except Exception as e:
-                                logger.error("[%s] Error during message processing: %s", table_name, e)
+                        except Exception as proc_err:
+                            logger.error("[%s] Error processing message: %s", table_name, proc_err, exc_info=True)
 
-                except Exception as e:
-                    logger.warning("[%s] Connection error: %s — retrying in 5 seconds.", table_name, e)
-                    await asyncio.sleep(5)
+        except TimeoutError:
+            # This fires when `duration` seconds have elapsed
+            logger.info("Stream duration elapsed; closing connection.")
 
-        except asyncio.CancelledError:
-            logger.info("[%s] Stream cancelled.", table_name)
+        except Exception as conn_err:
+            # connection-level failures (DNS, handshake, etc.)
+            logger.warning("[%s] Connection error: %s — retrying in 5 seconds.", table_name, conn_err, exc_info=True)
+            await asyncio.sleep(5)
 
     def start_stream(self, command: dict):
         required_keys = ["tickers", "duration", "stream_type"]
@@ -87,22 +82,9 @@ class EODHDStreamingService(AbstractStreamingService):
 
         if stream_type == "trades":
             url = cfg.EODHD_TRADE_URL
-            expected_dict = cfg.EODHD_TRADE_EXPECTED_DICT
         elif stream_type == "quotes":
             url = cfg.EODHD_QUOTE_URL
-            expected_dict = cfg.EODHD_QUOTE_EXPECTED_DICT
         else:
             raise ValueError(f"Unknown stream type: {stream_type}")
 
-        task = asyncio.get_running_loop().create_task(
-            self._stream_data(url, expected_dict, stream_type, tickers, duration)
-        )
-        self.tasks.append(task)
-        return task
-
-    async def stop_all_streams(self):
-        logger.info("Stopping all streams...")
-        for task in self.tasks:
-            task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-        logger.info("All streams stopped.")
+        asyncio.run(self._stream_data(url, stream_type, tickers, duration))

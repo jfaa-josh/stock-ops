@@ -1,8 +1,7 @@
-import asyncio
 import logging
 from datetime import UTC, datetime
 
-import aiohttp
+import requests
 
 from stockops.config import eodhd_config as cfg
 from stockops.data.transform import TransformData
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class EODHDHistoricalService(AbstractHistoricalService):
     def __init__(self):
-        self.tasks = []
+        pass
 
     def _to_unix_utc(self, dt_str: str) -> str:
         dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
@@ -27,44 +26,32 @@ class EODHDHistoricalService(AbstractHistoricalService):
         dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
         return dt.date().isoformat()
 
-    async def _fetch_data(self, ws_url: str, exp_data: dict, data_type: str, table_name: str):
-        expected_keys = set(exp_data)
+    def _fetch_data(self, ws_url: str, data_type: str, table_name: str):
         transform = TransformData("EODHD", f"historical_{data_type}")
 
         try:
-            async with aiohttp.ClientSession() as session:
-                try:
-                    async with session.get(ws_url) as response:
-                        data = await response.json()
+            resp = requests.get(ws_url, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.warning("[%s] HTTP error fetching %s: %s", table_name, ws_url, e)
+            return
 
-                        if isinstance(data, list):
-                            for row in data:
-                                if expected_keys.issubset(row):
-                                    # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
-                                    logger.debug("[%s] Received data: %s", table_name, row)
-                                    transformed_row = transform(row)
-                                    print(transformed_row)
-                                else:
-                                    logger.debug("[%s] Ignored non-trade message: %s", table_name, row)
+        if isinstance(data, list):
+            for row in data:
+                # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
+                logger.debug("[%s] Received data: %s", table_name, row)
+                transformed_row = transform(row)
+                print(transformed_row)
 
-                        elif isinstance(data, dict):
-                            if expected_keys.issubset(data):
-                                # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
-                                logger.debug("[%s] Received data: %s", table_name, data)
-                                transformed_row = transform(data)
-                                print(transformed_row)
-                            else:
-                                logger.debug("[%s] Ignored non-trade message: %s", table_name, data)
+        elif isinstance(data, dict):
+            # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
+            logger.debug("[%s] Received data: %s", table_name, data)
+            transformed_row = transform(data)
+            print(transformed_row)
 
-                        else:
-                            logger.error("[%s] Unexpected data format: %s", table_name, type(data).__name__)
-
-                except Exception as e:
-                    logger.warning("[%s] Connection error: %s — retrying in 5 seconds.", table_name, e)
-                    await asyncio.sleep(5)
-
-        except asyncio.CancelledError:
-            logger.info("[%s] Data fetch cancelled.", table_name)
+        else:
+            logger.error("[%s] Unexpected data format: %s", table_name, type(data).__name__)
 
     def start_historical_task(self, command: dict):
         required_keys = ["ticker", "interval", "start", "end"]
@@ -84,7 +71,6 @@ class EODHDHistoricalService(AbstractHistoricalService):
                 f"https://eodhd.com/api/intraday/{ticker}?api_token={api_token}"
                 f"&interval={interval}&from={start}&to={end}&fmt=json"
             )
-            expected_dict = cfg.EODHD_INTRADAY_HISTORICAL_EXPECTED_DICT
 
         elif interval in INTERDAY_FREQUENCIES:
             data_type = "interday"
@@ -94,18 +80,10 @@ class EODHDHistoricalService(AbstractHistoricalService):
                 f"https://eodhd.com/api/eod/{ticker}?api_token={api_token}"
                 f"&period={interval}&from={start}&to={end}&fmt=json"
             )
-            expected_dict = cfg.EODHD_INTERDAY_HISTORICAL_EXPECTED_DICT
 
         else:
             raise ValueError(f"Unknown interval type: {interval}")
 
         logger.info("Prepared historical task: type=%s ticker=%s interval=%s", data_type, ticker, interval)
 
-        task = asyncio.get_running_loop().create_task(self._fetch_data(url, expected_dict, data_type, ticker))
-        self.tasks.append(task)
-        return task
-
-    async def wait_for_all(self):
-        logger.info("Awaiting completion of all historical tasks...")
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-        logger.info("All historical tasks completed.")
+        self._fetch_data(url, data_type, ticker)
