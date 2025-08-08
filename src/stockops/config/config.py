@@ -1,8 +1,3 @@
-"""Created on Sun Jun 15 17:18:28 2025
-
-@author: JoshFody
-"""
-
 import os
 from pathlib import Path
 
@@ -22,8 +17,6 @@ def get_data_path(default_local):  # Switch for docker vs local
 
 
 DATA_DIR = get_data_path(ROOT_DIR / "data")
-
-DATA_DB_DATESTR = "%Y-%m-%d %H:%M:%S %Z%z"
 
 ### Streaming
 RAW_STREAMING_DIR = DATA_DIR / "raw" / "streaming"

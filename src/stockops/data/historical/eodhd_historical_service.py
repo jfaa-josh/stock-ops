@@ -1,5 +1,7 @@
 import logging
-from datetime import UTC, datetime
+from datetime import date, datetime
+from typing import cast
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -18,16 +20,19 @@ class EODHDHistoricalService(AbstractHistoricalService):
     def __init__(self):
         pass
 
-    def _to_unix_utc(self, dt_str: str) -> str:
-        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
-        return str(int(dt.replace(tzinfo=UTC).timestamp()))
+    def localtz_to_utctimestamp(self, ts_str: str, tz: ZoneInfo):
+        return int(datetime.strptime(ts_str, "%Y-%m-%d %H:%M").replace(tzinfo=tz).timestamp())
 
-    def _to_iso_date(self, dt_str: str) -> str:
-        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
-        return dt.date().isoformat()
+    def validate_interday(self, s: str):
+        """
+        Parse a date in “YYYY-MM-DD” form and return a date object.
+        Raises ValueError if the format is wrong or the date is invalid.
+        """
+        date.fromisoformat(s)
+        return s
 
-    def _fetch_data(self, ws_url: str, data_type: str, table_name: str):
-        transform = TransformData("EODHD", f"historical_{data_type}")
+    def _fetch_data(self, ws_url: str, data_type: str, exchange: str, table_name: str):
+        transform = TransformData("EODHD", f"historical_{data_type}", "to_db_writer", exchange)
 
         try:
             resp = requests.get(ws_url, timeout=30)
@@ -54,19 +59,23 @@ class EODHDHistoricalService(AbstractHistoricalService):
             logger.error("[%s] Unexpected data format: %s", table_name, type(data).__name__)
 
     def start_historical_task(self, command: dict):
-        required_keys = ["ticker", "interval", "start", "end"]
+        required_keys = ["ticker", "exchange", "interval", "start", "end"]
         for key in required_keys:
             if key not in command:
                 raise ValueError(f"Missing required key: {key}")
 
-        ticker = command["ticker"]
+        exchange = command["exchange"]
+        ticker = f"{command['ticker']}.{exchange}"
         interval = command["interval"]
         api_token = cfg.EODHD_API_TOKEN
 
+        tz_str = cast(str, cfg.EXCHANGE_METADATA[exchange]["Timezone"])
+        tz = ZoneInfo(tz_str)
+
         if interval in INTRADAY_FREQUENCIES:
             data_type = "intraday"
-            start = self._to_unix_utc(command["start"])
-            end = self._to_unix_utc(command["end"])
+            start = self.localtz_to_utctimestamp(command["start"], tz)
+            end = self.localtz_to_utctimestamp(command["end"], tz)
             url = (
                 f"https://eodhd.com/api/intraday/{ticker}?api_token={api_token}"
                 f"&interval={interval}&from={start}&to={end}&fmt=json"
@@ -74,8 +83,9 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
         elif interval in INTERDAY_FREQUENCIES:
             data_type = "interday"
-            start = self._to_iso_date(command["start"])
-            end = self._to_iso_date(command["end"])
+            start = self.validate_interday(command["start"])
+            end = self.validate_interday(command["end"])
+
             url = (
                 f"https://eodhd.com/api/eod/{ticker}?api_token={api_token}"
                 f"&period={interval}&from={start}&to={end}&fmt=json"
@@ -86,4 +96,4 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
         logger.info("Prepared historical task: type=%s ticker=%s interval=%s", data_type, ticker, interval)
 
-        self._fetch_data(url, data_type, ticker)
+        self._fetch_data(url, data_type, exchange, ticker)
