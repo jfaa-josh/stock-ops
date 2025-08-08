@@ -16,9 +16,16 @@ class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
         pass
 
-    async def _stream_data(self, ws_url: str, stream_type: str, symbols: list[str], duration: int):
+    async def _stream_data(
+        self,
+        ws_url: str,
+        stream_type: str,
+        exchange: str,
+        symbols: list[str],
+        duration: int,
+    ):
         table_name = "No Ticker Set"
-        transform = TransformData("EODHD", f"streaming_{stream_type}")
+        transform = TransformData("EODHD", f"streaming_{stream_type}", "to_db_writer", exchange)
 
         assert len(symbols) == 1, (
             "Please modify eodhd_streaming_service:_stream_data code to loop over multiple tickers..."
@@ -71,20 +78,21 @@ class EODHDStreamingService(AbstractStreamingService):
             await asyncio.sleep(5)
 
     def start_stream(self, command: dict):
-        required_keys = ["tickers", "duration", "stream_type"]
+        required_keys = ["tickers", "duration", "stream_type", "exchange"]
         for key in required_keys:
             if key not in command:
                 raise ValueError(f"Missing required command key: {key}")
 
-        tickers = command["tickers"]
+        tickers = [command["tickers"]]  # Convert to list for EODHD compatibility, future may write to multiple tickers
+        exchange = command["exchange"].lower()
         duration = command["duration"]
         stream_type = command["stream_type"]
 
         if stream_type == "trades":
-            url = cfg.EODHD_TRADE_URL
+            url = f"wss://ws.eodhistoricaldata.com/ws/{exchange}?api_token={cfg.EODHD_API_TOKEN}"
         elif stream_type == "quotes":
-            url = cfg.EODHD_QUOTE_URL
+            url = f"wss://ws.eodhistoricaldata.com/ws/{exchange}-quote?api_token={cfg.EODHD_API_TOKEN}"
         else:
             raise ValueError(f"Unknown stream type: {stream_type}")
 
-        asyncio.run(self._stream_data(url, stream_type, tickers, duration))
+        asyncio.run(self._stream_data(url, stream_type, exchange.upper(), tickers, duration))

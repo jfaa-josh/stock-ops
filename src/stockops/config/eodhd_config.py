@@ -15,6 +15,15 @@ EODHD_API_TOKEN = os.getenv("EODHD_API_TOKEN")
 if not EODHD_API_TOKEN:
     raise ValueError("EODHD_API_TOKEN not set. Check .env or GitHub Secrets.")
 
-### Streaming
-EODHD_TRADE_URL = f"wss://ws.eodhistoricaldata.com/ws/us?api_token={EODHD_API_TOKEN}"
-EODHD_QUOTE_URL = f"wss://ws.eodhistoricaldata.com/ws/us-quote?api_token={EODHD_API_TOKEN}"
+# Exchange metadata
+EXCHANGE_METADATA = {
+    "US": {
+        "Timezone": "America/New_York",
+        "Currency": "USD",
+        "TradingHours": {
+            "Open": "09:30:00",
+            "Close": "16:00:00",
+            "WorkingDays": "Mon,Tue,Wed,Thu,Fri",
+        },
+    }
+}

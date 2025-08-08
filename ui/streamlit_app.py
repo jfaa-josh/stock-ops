@@ -25,6 +25,17 @@ api = st.session_state.api
 # UI layout
 st.title("Prefect Trigger Dashboard")
 
+
+# PRINT THESE INSTRUCTIONS OUT FOR THE USER:
+#***SOMETHING TO NOTE HERE: if the requested interval for historic data is
+# larger than the atomic unit of aggregation, the end intervals may contain
+# partial length intervals (i.e., parts of a week, if 'w' requested), so it
+# is important to make sure to/from are set carefully!!!
+# ***MAKE SURE I PRINT OUT THE EXCHANGE HOURS FOR LOCAL TZ!!! NOTE THAT
+# HISTORICAL DATA ONLY AGGREGATES OPEN EXCHANGE HOUR DATA!!!
+# NOTE THAT ALL DATE INPUTS ARE IN LOCAL TZ OF THE EXCHANGE, NOT UTC!!!
+
+
 if st.button("Run Historical SPY"):
     logger.info("Button pressed: Run Historical SPY")
     try:
@@ -47,10 +58,13 @@ if st.button("Run Historical SPY"):
             time.sleep(5)
 
         if status == "READY":
-            ticker = 'SPY.US'
+            ticker = 'SPY'
+            exchange = 'US'
             interval = '1m'
-            start = '2025-07-02 09:30'
-            end = '2025-07-02 16:00'
+            start = '2025-07-02 09:30' # Exchange local TZ FOR INTRADAY
+            end = '2025-07-02 16:00' # Exchange local TZ FOR INTRADAY
+            # start = '2025-07-02' # Exchange local TZ FOR INTERDAY
+            # end = '2025-07-02' # Exchange local TZ FOR INTERDAY
             command_type = 'fetch_historical'
             # command_type = 'start_stream'
             provider = 'EODHD'
@@ -60,10 +74,9 @@ if st.button("Run Historical SPY"):
         #  FIX TICKER SO THAT I COULD PASS IN A LIST BUT DONT MAKE THIS ALL HARD CODED TO EODHD's NEEDS!!!
 
             if command_type == 'fetch_historical':
-                command = {"ticker": ticker, "interval": interval, "start": start, "end": end}
+                command = {"ticker": ticker, "exchange": exchange, "interval": interval, "start": start, "end": end}
             elif command_type == 'start_stream':
-                ticker = [ticker.split('.')[0]]
-                command = {"stream_type": stream_type, "tickers": ticker, "duration": duration}
+                command = {"stream_type": stream_type, "tickers": ticker, "exchange": exchange, "duration": duration}
 
             response = api.run_deployed_flow(deployment_id, provider, command_type, command)
             flow_run_name = response['name']
