@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 ui = [
   "streamlit",
+  "streamlit-autorefresh",
   "requests"
 ]
 
@@ -36,6 +37,7 @@ dev = [
     # These are repeated here for local dev only to avoid errors
     "streamlit",
     "requests",
+    "streamlit-autorefresh",
 ]
 
 [tool.ruff]

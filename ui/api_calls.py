@@ -38,19 +38,30 @@ class APIBackend:
             "x-prefect-api-version": self.api_version
         }
 
-    def send(self, url, payload, headers):
+    def send(self, url, payload, headers, method="POST", timeout=30):
         try:
-            response = requests.post(url, json=payload, headers=headers)
+            if method == "POST":
+                response = requests.post(url, json=payload, headers=headers, timeout=timeout)
+            elif method == "DELETE":
+                response = requests.delete(url, headers=headers, timeout=timeout)
+            else:
+                raise ValueError(f"Unsupported method: {method}")
+
             response.raise_for_status()
-            logger.info("API send successfull.")
+            if response.status_code == 204 or not response.content:
+                logger.info("API request successful (no content).")
+                return {"deleted": True}
+
+            logger.info("API request successful.")
             logger.debug("Response: %s", response.text)
             return response.json()
+
         except requests.exceptions.HTTPError as e:
-            # Only HTTPError lets us inspect e.response
-            if e.response is not None and e.response.status_code == 409:
-                # log the actual JSON payload that Prefect returned
-                logger.error("409 payload: %s", e.response.json())
-            # re-raise so that upstream logic still sees the failure
+            if e.response is not None:
+                try:
+                    logger.error("HTTP %s response: %s", e.response.status_code, e.response.json())
+                except Exception:
+                    logger.error("HTTP %s response (non-JSON): %s", e.response.status_code, e.response.text)
             raise
         except requests.exceptions.RequestException as e:
             logger.error("HTTP request failed: %s", str(e), exc_info=True)
@@ -61,9 +72,9 @@ class APIBackend:
             url = f"{self.api_url}/deployments/{deployment_id}"
             headers = self.build_headers()
             logger.info(f"Checking deployment status...")
-            response = requests.get(url, headers)
+            response = requests.get(url, headers=headers)
             response.raise_for_status()
-            logger.info("API send successfull.")
+            logger.info("Deployment status retrieved successfully.")
             logger.debug("Response: %s", response.text)
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -141,4 +152,14 @@ class APIBackend:
         logger.debug("Payload: %s", payload)
 
         response = self.send(url, payload, headers)
+        return response
+
+    def delete_deployment(self, deployment_id: str):
+        url = f"{self.api_url}/deployments/{deployment_id}"
+        headers = self.build_headers()
+
+        logger.info("Deleting deployment: %s", deployment_id)
+        logger.debug("DELETE %s", url)
+
+        response = self.send(url, None, headers, method='DELETE')
         return response
