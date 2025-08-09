@@ -70,6 +70,20 @@ class APIBackend:
             logger.error("HTTP request failed: %s", str(e), exc_info=True)
             raise
 
+    def check_flow_run_status(self, flow_run_id: str):
+        try:
+            url = f"{self.api_url}/flow_runs/{flow_run_id}"
+            headers = self.build_headers()
+            logger.info(f"Checking status for flow run {flow_run_id}...")
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            logger.info("Flow run status retrieved successfully.")
+            logger.debug("Response: %s", response.text)
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error("HTTP request failed: %s", str(e), exc_info=True)
+            raise
+
     def register_controller_flow(self, flow_name):
         """
         Creates (or retrieves) the specified flow name on Prefect Server
