@@ -1,24 +1,21 @@
+# TO TEST LOCALLY RUN IN POWERSHELL: streamlit run local_workflows/local_streamlit_dev.py
+
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 from dataclasses import dataclass
-from typing import Any, Protocol, Literal, Tuple
-import sys
+from typing import Literal
+import time
 import logging
 import random
 import string
 import uuid
 import datetime as dt
+from datetime import datetime, UTC   # on Python < 3.11: from datetime import datetime, timezone as UTC
 
-import api_calls
+STRICT_TYPECHECK = False  # set True to raise on failures FOR TESTING ONLY
 
-# Logging setup
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-    force=True,
-)
-logger = logging.getLogger(__name__)
+def _typename(x):
+    return type(x).__name__
 
 # ─────────────────────────────────────────────────────────────
 # 1) Use the wide page layout (expands beyond the centered column)
@@ -42,13 +39,202 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────
 
+# ============ Dummy API with session-backed state ============
+def _ensure_api_state():
+    st.session_state.setdefault("_deployments", {})  # deployment_id -> dict
+    st.session_state.setdefault("_flow_runs", {})    # flow_run_id   -> dict
+
+# simple slug generator for flow run names (e.g., "judicious_shrimp")
+_ADJS = [
+    "brisk", "careful", "diligent", "eager", "fearless", "gentle", "humble",
+    "judicious", "keen", "lively", "mindful", "noble", "orderly", "patient",
+    "quick", "robust", "steadfast", "tactful", "upbeat", "vivid", "wise", "youthful", "zesty"
+]
+_NOUNS = [
+    "otter", "shrimp", "falcon", "lynx", "badger", "heron", "salmon", "sparrow",
+    "walrus", "beaver", "cricket", "beetle", "panther", "ibis", "iguana", "swift",
+    "tern", "seal", "puffin", "ferret", "marmot", "stoat", "fox", "jay"
+]
+def _slug():
+    return f"{random.choice(_ADJS)}_{random.choice(_NOUNS)}"
+
+class DummyAPI:
+    _EXPECTED_SCHEMAS = {
+        "fetch_historical": {
+            "ticker": str,
+            "exchange": str,
+            "interval": str,
+            "start": str,
+            "end": str,
+        },
+        "stream_live": {
+            "ticker": str,
+            "exchange": str,
+            "streamType": str,  # "trades" | "quotes"
+            "duration": int,    # seconds
+        },
+    }
+
+    def _validate_and_log_call(self, deployment_id, provider, command_type, command):
+        # Top-level param checks
+        top_checks = {
+            "deployment_id": (deployment_id, str),
+            "provider":      (provider, str),
+            "command_type":  (command_type, str),
+            "command":       (command, dict),
+        }
+
+        top_results = {}
+        for name, (val, expected) in top_checks.items():
+            ok = isinstance(val, expected)
+            top_results[name] = {"ok": ok, "got": _typename(val), "expected": expected.__name__}
+
+        # Command schema checks (if we have a schema for this command_type)
+        cmd_schema = self._EXPECTED_SCHEMAS.get(command_type, {})
+        field_results = {}
+        for k, expected_t in cmd_schema.items():
+            v = None if not isinstance(command, dict) else command.get(k, None)
+            ok = isinstance(v, expected_t)
+            field_results[k] = {"ok": ok, "got": _typename(v), "expected": expected_t.__name__}
+
+        # Pretty log to terminal
+        lines = []
+        lines.append("─" * 72)
+        lines.append("DummyAPI.run_deployed_flow called with:")
+        lines.append(f"  deployment_id: {deployment_id!r} ({_typename(deployment_id)})")
+        lines.append(f"  provider     : {provider!r} ({_typename(provider)})")
+        lines.append(f"  command_type : {command_type!r} ({_typename(command_type)})")
+        lines.append(f"  command dict : ({_typename(command)}) ->")
+        if isinstance(command, dict):
+            for ck, cv in command.items():
+                lines.append(f"      - {ck}: {cv!r} ({_typename(cv)})")
+        else:
+            lines.append("      <not a dict>")
+
+        lines.append("Top-level type checks:")
+        for name, res in top_results.items():
+            status = "PASS" if res["ok"] else "FAIL"
+            lines.append(f"  [{status}] {name}: expected {res['expected']}, got {res['got']}")
+
+        if cmd_schema:
+            lines.append(f"Command schema checks for {command_type!r}:")
+            for name, res in field_results.items():
+                status = "PASS" if res["ok"] else "FAIL"
+                lines.append(f"  [{status}] {name}: expected {res['expected']}, got {res['got']}")
+        else:
+            lines.append(f"(No schema registered for command_type={command_type!r}; skipping field checks)")
+
+        lines.append("─" * 72)
+        logger.info("\n".join(lines))
+
+        # Decide pass/fail
+        ok_top = all(res["ok"] for res in top_results.values())
+        ok_cmd = True if not cmd_schema else all(res["ok"] for res in field_results.values())
+        all_ok = ok_top and ok_cmd
+
+        if STRICT_TYPECHECK and not all_ok:
+            # Raise a helpful error with specifics
+            problems = []
+            problems += [f"{k}: expected {v['expected']}, got {v['got']}" for k, v in top_results.items() if not v["ok"]]
+            problems += [f"{k}: expected {v['expected']}, got {v['got']}" for k, v in field_results.items() if not v["ok"]]
+            raise TypeError("Type check failed for run_deployed_flow params:\n  - " + "\n  - ".join(problems))
+
+        return all_ok
+
+    def register_deployment(self, name, schedules):
+        _ensure_api_state()
+        dep_id = str(uuid.uuid4())
+        # simulate a NOT_READY → READY transition after a few seconds
+        st.session_state["_deployments"][dep_id] = {
+            "id": dep_id,
+            "name": name,
+            "schedules": schedules,
+            "created_ts": time.time(),
+            "status": "NOT_READY",   # will become READY after ~3s
+        }
+        return {"id": dep_id, "name": name}
+
+    def check_deployment_status(self, deployment_id):
+        _ensure_api_state()
+        meta = st.session_state["_deployments"].get(deployment_id)
+        if not meta:
+            return {"status": "NOT_READY"}
+        # promote to READY ~3s after creation
+        if (time.time() - meta["created_ts"]) >= 3 and meta["status"] != "READY":
+            meta["status"] = "READY"
+            st.session_state["_deployments"][deployment_id] = meta
+        return {"status": meta["status"]}
+
+    def delete_deployment(self, deployment_id):
+        _ensure_api_state()
+        st.session_state["_deployments"].pop(deployment_id, None)
+        # clean up any flow runs tied to this deployment
+        to_del = [fr for fr, fm in st.session_state["_flow_runs"].items()
+                  if fm.get("deployment_id") == deployment_id]
+        for fr in to_del:
+            st.session_state["_flow_runs"].pop(fr, None)
+        return {"deleted": True}
+
+    def run_deployed_flow(self, deployment_id, provider, command_type, command):
+        _ensure_api_state()
+
+        # >>> NEW: log + runtime type checks
+        self._validate_and_log_call(deployment_id, provider, command_type, command)
+        # <<<
+
+        if deployment_id not in st.session_state["_deployments"]:
+            raise ValueError("Deployment does not exist")
+
+        flow_run_id = str(uuid.uuid4())
+        name = _slug()
+        st.session_state["_flow_runs"][flow_run_id] = {
+            "id": flow_run_id,
+            "name": name,
+            "deployment_id": deployment_id,
+            "command": command,
+            "start_ts": time.time(),
+            "state_type": "PENDING",
+        }
+        return {"name": name, "id": flow_run_id}
+
+    def check_flow_run_status(self, flow_run_id):
+        _ensure_api_state()
+        meta = st.session_state["_flow_runs"].get(flow_run_id)
+        if not meta:
+            return {"state_name": None, "state_type": None, "name": None}
+
+        # simple time-based state machine
+        elapsed = time.time() - meta["start_ts"]
+        if elapsed < 5:
+            state = "PENDING"
+        elif elapsed < 15:
+            state = "RUNNING"
+        else:
+            state = "COMPLETED"
+
+        meta["state_type"] = state
+        st.session_state["_flow_runs"][flow_run_id] = meta
+
+        start_iso = datetime.fromtimestamp(meta["start_ts"], UTC).isoformat().replace("+00:00", "Z")
+        end_iso = None
+        if state in {"COMPLETED", "FAILED", "CANCELLED", "CRASHED"}:
+            end_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+        return {
+            "id": flow_run_id,
+            "name": meta["name"],
+            "state_name": state,
+            "state_type": state,
+            "start_time": start_iso,
+            "end_time": end_iso,
+        }
+
+api = DummyAPI()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # ============ App state ============
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "CRASHED"}
-
-if "api" not in st.session_state:
-    st.session_state.api = api_calls.APIBackend("controller_driver")
-
-api = st.session_state.api
 
 if "deploy_configs" not in st.session_state:
     # each cfg: {row_id, ticker, exchange, interval, frequency, start, end, deployment_name, deployment_id, flow_run_id, flow_run_name, flow_state}
@@ -56,15 +242,6 @@ if "deploy_configs" not in st.session_state:
 
 if "skip_refresh_once" not in st.session_state:
     st.session_state.skip_refresh_once = False
-
-# Helper: unique 2-char suffix for dep names
-def get_unique_id():
-    used = {cfg["deployment_name"].rsplit("_", 1)[-1] for cfg in st.session_state.deploy_configs}
-    chars = string.ascii_uppercase + string.digits
-    while True:
-        uid = "".join(random.choices(chars, k=2))
-        if uid not in used:
-            return uid
 
 # Helper: remove row by stable id (avoid idx/key reuse issues)
 def remove_row(row_id: str):
@@ -91,24 +268,11 @@ def run_deployment(cfg):
     st.success(f"Flow triggered: {response['name']}")
     return response["id"], response["name"]
 
-class ApiLike(Protocol):
-    def register_deployment(
-        self,
-        deployment_name: str,
-        schedules: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]: ...
-    def check_deployment_status(self, deployment_id: str) -> dict[str, Any]: ...
-    def delete_deployment(self, deployment_id: str) -> dict[str, Any]: ...
-    def run_deployed_flow(
-        self, deployment_id: str, provider: str, command_type: str, command: dict[str, Any]
-    ) -> dict[str, Any]: ...
-    def check_flow_run_status(self, flow_run_id: str) -> dict[str, Any]: ...
-
 @dataclass
 class Section:
     ns: str              # e.g., "hist" or "stream"
     title: str           # expander title
-    api: ApiLike
+    api: DummyAPI
     mode: Literal["hist","stream"] = "hist"
     provider: str = "EODHD"  # currently only EODHD is supported
 
@@ -158,7 +322,7 @@ class Section:
         s = self.api.check_deployment_status(cfg["deployment_id"]).get("status")
         return s == "READY"
 
-    def run_deployment(self, cfg) -> Tuple[str, str]:
+    def run_deployment(self, cfg):
         if self.mode == "hist":
             command_type = "fetch_historical"
             command = {
@@ -169,20 +333,16 @@ class Section:
                 "end":      cfg["end"],
             }
         else:
-            command_type = "start_stream"
+            command_type = "stream_live"
             # Parse duration for the command payload; fall back safely if bad text
             try:
-                duration_int = int(cfg.get("duration","").strip())
-                if duration_int <= 0:
-                    raise ValueError
+                duration_int = int(cfg.get("duration", "0").strip())
             except Exception:
-                st.error("Duration must be a positive integer.")
-                raise ValueError("Duration must be a positive integer.")
-
+                duration_int = 0
             command = {
-                "tickers":     cfg["ticker"],
+                "ticker":     cfg["ticker"],
                 "exchange":   cfg["exchange"],
-                "stream_type": cfg["stream_type"],  # "trades" | "quotes"
+                "streamType": cfg["stream_type"],  # "trades" | "quotes"
                 "duration":   duration_int,        # int in payload
             }
 
@@ -313,10 +473,9 @@ class Section:
             if cfg.get("flow_run_id") and (cfg.get("flow_state") not in TERMINAL):
                 try:
                     resp = self.api.check_flow_run_status(cfg["flow_run_id"])
-                    state = resp.get("state") or {}
-                    cfg["flow_state"] = state.get("type")  # e.g., RUNNING, COMPLETED
+                    cfg["flow_state"] = resp.get("state_type")
                     if resp.get("name"):
-                        cfg["flow_run_name"] = resp["name"]
+                        cfg["flow_run_name"] = resp.get("name")
                 except Exception as e:
                     st.warning(f"Failed to check status for run {cfg['flow_run_id']}: {e}")
 
@@ -324,9 +483,7 @@ class Section:
             dep_status = "NOT_READY"
             if cfg.get("deployment_id"):
                 try:
-                    dep_resp = self.api.check_deployment_status(cfg["deployment_id"])
-                    s = dep_resp.get("status")
-                    dep_status = s.get("status") if isinstance(s, dict) else (s or "NOT_READY")
+                    dep_status = self.api.check_deployment_status(cfg["deployment_id"]).get("status") or "NOT_READY"
                 except Exception:
                     pass
 
@@ -367,20 +524,9 @@ class Section:
                     ):
                         if cfg.get("deployment_id"):
                             try:
-                                resp = self.api.delete_deployment(cfg["deployment_id"])
+                                self.api.delete_deployment(cfg["deployment_id"])
                             except Exception as e:
-                                logger.exception("Delete API failed for %s", cfg["deployment_id"])
-                                st.error(f"Delete failed: {e}")
-                            else:
-                                deleted = bool(resp.get("deleted")) if isinstance(resp, dict) else False
-                                if deleted:
-                                    cfgs[:] = [c for c in cfgs if c["row_id"] != cfg["row_id"]]
-                                    self.set_cfgs(cfgs)
-                                    st.success(f"Deleted configuration: {cfg['deployment_name']}")
-                                    self.mark_skip_refresh()
-                                    st.rerun()
-                                else:
-                                    st.warning(f"Unexpected delete response: {resp!r}")
+                                st.warning(f"Delete API failed: {e}")
 
                         # Remove from the *live* list in-place and persist
                         cfgs[:] = [c for c in cfgs if c["row_id"] != cfg["row_id"]]
