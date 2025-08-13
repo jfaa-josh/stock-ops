@@ -1,14 +1,10 @@
 import logging
 from datetime import UTC, date, datetime
-from zoneinfo import ZoneInfo
 
-from stockops.config import eodhd_config  # , add additional providers here as needed
+# from zoneinfo import ZoneInfo
+from stockops.config import utils as cfg_utils  # , add additional providers here as needed
 
 logger = logging.getLogger(__name__)
-
-_CONFIG_MAP = {
-    "EODHD": eodhd_config,
-}
 
 
 class TransformData:
@@ -16,19 +12,8 @@ class TransformData:
         self.provider = provider
         self.data_type = data_type
         self.target = target
-        self.exchange = exchange
-        self.cfg = self.set_cfg()
-        self.tz = self.get_tz()
-
-    def set_cfg(self):
-        try:
-            return _CONFIG_MAP[self.provider]
-        except KeyError as err:
-            raise ValueError(f"Unsupported provider: {self.provider!r}. Supported: {list(_CONFIG_MAP)}") from err
-
-    def get_tz(self):
-        tz_str = self.cfg.EXCHANGE_METADATA[self.exchange]["Timezone"]
-        return ZoneInfo(tz_str)
+        self.cfg_utils = cfg_utils.ProviderConfig(provider, exchange)
+        self.tz_str = self.cfg_utils.tz_str
 
     def __call__(self, data_row: dict):
         if self.provider == "EODHD":
@@ -125,12 +110,12 @@ class TransformData:
                 # - '1m': "%Y-%m-%d %H:%M"
                 # - '5m': "%Y-%m-%d %H:%M"
                 # - '1h': "%Y-%m-%d %H"
-                # self.tz
+                # self.tz_str
                 pass
             elif self.data_type == "streaming":
                 # HERE I NEED TO CONVERT TS TO FRACTION SECONDS (MS TO S) THEN TO HUMAN READABLE DATE:
                 # "%Y-%m-%d %H:%M:%S.%f"
-                # self.tz
+                # self.tz_str
                 pass
 
         return transformed

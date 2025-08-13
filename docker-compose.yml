@@ -103,6 +103,7 @@ services:
       - ./data:/app/data                              # bind local data directory for .db file storage in the container
 
   streamlit:                                          # Streamlit UI container
+    <<: *common-envfile                               # Load common .env file for environment variables
     build:
       context: .                                      # Build context is repo root
       args:
@@ -115,6 +116,7 @@ services:
       prefect-serve:
         condition: service_healthy                    # Wait until Prefect server is ready
     environment:
+      <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api   # Prefect API URL for Streamlit to trigger flows
     command: streamlit run ui/streamlit_app.py          # Launch the Streamlit application
 
