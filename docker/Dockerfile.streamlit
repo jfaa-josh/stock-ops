@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+
+ARG PYTHON_VERSION
+FROM python:${PYTHON_VERSION}-slim
+
+WORKDIR /app
+
+# Tools + tzdata (ZoneInfo needs this on slim)
+RUN apt-get update && apt-get install -y curl tzdata && apt-get clean
+
+# Copy only what's needed to install dependencies
+COPY pyproject.toml uv.lock ./
+RUN pip install uv
+
+# Copy the helper script
+COPY scripts/install_ui_deps.py ./scripts/install_ui_deps.py
+
+# Install dependencies for ui only -> dynamically grab the ui deps and install them (avoids importing the whole repo)
+RUN python3 scripts/install_ui_deps.py
+
+# Copy only needed scripts and files
+COPY datapipe_ui/ ./datapipe_ui/
+COPY prefect/ ./prefect/
+
+# Copy the stockops subpackage bits
+COPY src/stockops/config/     /app/src/stockops/config/
+
+# Create a dummy __init__.py file to make stockops a package for partial copy to work
+RUN mkdir -p /app/src/stockops && :> /app/src/stockops/__init__.py

@@ -9,6 +9,12 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+# NEED TO DESYNC THIS!!!!!
+# I NEED TO INDEX MY MOST COMMON QUERIED VARS: (prob ticker, interval, timestamp).  See one note on indexing.
+# MAKE SURE I SAVE INTERVAL LENGTH TO THE DB FOR HISTORICAL!!!
+#  (WHAT ABOUT PULL DATE/REVISION?)
+# STRWEAMING: Combine trades and quotes. (NEED TO THINK ABOUT NA COLS).
+
 
 class SQLiteWriter:
     def __init__(self, db_filepath: Path, table_name: str):
@@ -86,27 +92,6 @@ class AsyncSQLiteWriter:
             except Exception as e:
                 logging.error(f"[{self.table_name}] Failed to insert row: {e}")
         self.writer.close()
-
-
-class WriterRegistry:
-    """
-    A global registry to ensure a single AsyncSQLiteWriter exists per (db_path, table_name).
-    All services and tasks should use this registry to obtain a writer.
-    """
-
-    _writers: dict[str, AsyncSQLiteWriter] = {}
-
-    @classmethod
-    def get_writer(cls, db_path: Path, table_name: str) -> AsyncSQLiteWriter:
-        key = f"{db_path.resolve()}::{table_name}"
-        if key not in cls._writers:
-            cls._writers[key] = AsyncSQLiteWriter(db_path, table_name)
-        return cls._writers[key]
-
-    @classmethod
-    async def shutdown_all(cls) -> None:
-        await asyncio.gather(*(writer.shutdown() for writer in cls._writers.values()))
-        cls._writers.clear()
 
 
 class SQLiteReader:

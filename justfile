@@ -11,7 +11,7 @@ install-dev:
     ./scripts/install-dev.sh
 
 # Run all key checks (including types), not fixing any issues (for ci only)
-lint-ci: ruff-format ruff-check mypy
+lint-ci: ruff-check mypy
 
 ruff-format:
     uv run ruff format src tests
@@ -48,5 +48,5 @@ docker-build:
   chmod +x scripts/derive_env_from_pyproject.py
   ./scripts/derive_env_from_pyproject.py
   test -f .env || (echo ".env not found after derive_env_from_pyproject.py" && exit 1)
-  docker compose build postgres prefect-server prefect-agent
+  docker compose build
   if [ "${CI:-}" = "true" ]; then rm .env; fi

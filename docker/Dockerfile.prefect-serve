@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1
+
+ARG PYTHON_VERSION
+ARG PREFECT_VERSION
+FROM prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
+
+# Set working directory in image
+WORKDIR /app
+
+# Install useful debugging tool
+RUN apt-get update && apt-get install -y curl && apt-get clean
+
+# Copy dependency files only (to take advantage of layer caching)
+COPY pyproject.toml uv.lock README.md ./
+
+# Copy source code needed to execute flows
+COPY src/ ./src/
+COPY prefect/ ./prefect/
+
+# Install dependencies
+RUN uv pip install --system --editable .
