@@ -19,7 +19,7 @@ COPY scripts/install_ui_deps.py ./scripts/install_ui_deps.py
 RUN python3 scripts/install_ui_deps.py
 
 # Copy only needed scripts and files
-COPY ui/ ./ui/
+COPY datapipe_ui/ ./datapipe_ui/
 COPY prefect/ ./prefect/
 
 # Copy the stockops subpackage bits

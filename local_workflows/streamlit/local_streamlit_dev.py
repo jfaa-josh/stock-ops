@@ -1,8 +1,6 @@
-# TO TEST LOCALLY RUN IN POWERSHELL: streamlit run local_workflows/streamlit/local_streamlit_dev.py
+import os, sys, subprocess
 
-import os
-
-
-# Set test mode in main app
 os.environ["TEST_MODE"] = "1"
-os.system("streamlit run ui/streamlit_app.py")
+sys.exit(
+    subprocess.call([sys.executable, "-m", "streamlit", "run", "datapipe_ui/frontend.py", "--server.port", "8501"])
+)
