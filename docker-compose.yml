@@ -118,7 +118,7 @@ services:
     environment:
       <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api   # Prefect API URL for Streamlit to trigger flows
-    command: streamlit run ui/streamlit_app.py          # Launch the Streamlit application
+    command: streamlit run datapipe_ui/frontend.py      # Launch the Streamlit application
 
 volumes:                                              # Named Docker volumes for data persistence
   postgres_data:                                      # Holds Postgres data directory

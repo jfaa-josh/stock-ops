@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Tuple, Optional, List, Dict
 import sys
 import logging
@@ -9,6 +9,7 @@ import string
 import uuid
 import datetime as dt
 import os
+from zoneinfo import ZoneInfo
 
 from api_factory import ApiLike, make_api
 from ui_backend import DeploymentService
@@ -22,6 +23,14 @@ logging.basicConfig(
     force=True,
 )
 logger = logging.getLogger(__name__)
+
+for noisy in (
+    "watchdog",
+    "watchdog.observers.inotify_buffer",
+    "urllib3",
+    "PIL",
+):
+    logging.getLogger(noisy).setLevel(logging.WARNING)
 
 # ─────────────────────────────────────────────────────────────
 # 1) Use the wide page layout (expands beyond the centered column)
@@ -63,23 +72,12 @@ api: ApiLike = st.session_state.api
 
 if "services" not in st.session_state:
     st.session_state.services = {
-        "hist": DeploymentService(st.session_state.api, provider="EODHD"),
-        "stream": DeploymentService(st.session_state.api, provider="EODHD"),
+        "hist": DeploymentService(st.session_state.api, provider="EODHD", mode = "hist"),
+        "stream": DeploymentService(st.session_state.api, provider="EODHD", mode = "stream"),
     }
 
 svc_hist = st.session_state.services["hist"]
 svc_stream = st.session_state.services["stream"]
-
-if "deploy_configs" not in st.session_state:
-    # each cfg: {row_id, ticker, exchange, interval, frequency, start, end, deployment_name, deployment_id, flow_run_id, flow_run_name, flow_state}
-    st.session_state.deploy_configs = []
-
-if "skip_refresh_once" not in st.session_state:
-    st.session_state.skip_refresh_once = False
-
-# Helper: remove row by stable id (avoid idx/key reuse issues)
-def remove_row(row_id: str):
-    st.session_state.deploy_configs = [c for c in st.session_state.deploy_configs if c["row_id"] != row_id]
 
 @dataclass
 class Section:
@@ -88,15 +86,18 @@ class Section:
     api: ApiLike
     mode: Literal["hist","stream"] = "hist"
     provider: str = "EODHD"  # currently only EODHD is supported
+    cfg_key: str = field(init=False)
+    skip_key: str = field(init=False)
 
     # ---- namespaced session state accessors ----
     @property
-    def cfg_key(self) -> str:
-        return f"{self.ns}_deploy_configs"
+    def svc(self) -> DeploymentService:
+        # Route to the correct DeploymentService instance
+        return svc_hist if self.mode == "hist" else svc_stream
 
-    @property
-    def skip_key(self) -> str:
-        return f"{self.ns}_skip_refresh_once"
+    def __post_init__(self):
+        self.cfg_key  = f"{self.ns}_deploy_configs"
+        self.skip_key = f"{self.ns}_skip_refresh_once"
 
     def get_cfgs(self):
         return st.session_state.setdefault(self.cfg_key, [])
@@ -124,15 +125,9 @@ class Section:
             if uid not in used:
                 return uid
 
-    def remove_row(self, row_id: str):
-        self.set_cfgs([c for c in self.get_cfgs() if c["row_id"] != row_id])
-
     def run_deployment(self, cfg) -> Tuple[str, str]:
-        if self.mode == "hist":
-            fr_id, fr_name = svc_hist.run_historical(cfg)
-
-        elif self.mode == "stream":
-            try: # Parse duration for the command payload; fall back safely if bad text
+        if self.mode == "stream":
+            try:
                 duration_int = int(cfg.get("duration","").strip())
                 if duration_int <= 0:
                     raise ValueError
@@ -140,7 +135,7 @@ class Section:
                 st.error("Duration must be a positive integer.")
                 raise ValueError("Duration must be a positive integer.")
 
-            fr_id, fr_name = svc_hist.run_stream(cfg)
+        fr_id, fr_name = self.svc.trigger_flow(cfg)
 
         st.success(f"Flow triggered: {fr_name}")
         return fr_id, fr_name
@@ -161,22 +156,41 @@ class Section:
         if not use_schedule:
             return (False, None)
 
-        if self.mode == "hist":
-            tz_key = svc_hist.get_exchange_tz(exchange)
-        elif self.mode == "stream":
-            tz_key = svc_stream.get_exchange_tz(exchange)
+        tz_key = self.svc.get_exchange_tz(exchange)
         st.caption(f"Scheduling in exchange timezone: {tz_key}")
+
+        # --- default DTSTART = ceil(now to next 15-min slot) in exchange tz ---
+        now_local = dt.datetime.now(ZoneInfo(tz_key)).replace(second=0, microsecond=0)
+        add = (15 - (now_local.minute % 15)) % 15
+        dtstart_default = now_local if add == 0 else (now_local + dt.timedelta(minutes=add))
+
+        _default_date = dtstart_default.date()
+        _default_time = dtstart_default.time()
+
+        start_cols = st.columns(2)
+        dtstart_date = start_cols[0].date_input(
+            "Start date (DTSTART)",
+            value=_default_date,
+            key=f"{self.ns}_sched_dtstart_date",
+            help="First eligible date for the schedule (exchange local date).",
+        )
+        dtstart_time = start_cols[1].time_input(
+            "Start time (DTSTART)",
+            value=_default_time,
+            key=f"{self.ns}_sched_dtstart_time",
+            help="Local wall time in the exchange timezone. DST is preserved by Prefect.",
+        )
 
         freq = st.selectbox(
             "Frequency (RRULE FREQ)",
-            options=["DAILY", "WEEKLY", "MONTHLY", "HOURLY", "MINUTELY"],
+            options=["DAILY", "WEEKLY", "MONTHLY", "HOURLY", "MINUTELY", "YEARLY"],
             index=0,
             key=f"{self.ns}_sched_freq",
             help=(
                 "How often to run:\n"
-                "• DAILY: every [Interval] days\n"
-                "• WEEKLY: every [Interval] weeks (use BYDAY below)\n"
-                "• MONTHLY: every [Interval] months (use times below)\n"
+                "• DAILY: every [Interval] days (choose time-of-day below)\n"
+                "• WEEKLY: every [Interval] weeks (choose BYDAY below + time-of-day)\n"
+                "• MONTHLY: every [Interval] months — choose either a day-of-month or an Nth weekday pattern, then time-of-day\n"
                 "• HOURLY: every [Interval] hours (uses BYMINUTE/BYSECOND)\n"
                 "• MINUTELY: every [Interval] minutes (uses BYSECOND)"
             ),
@@ -190,51 +204,12 @@ class Section:
                 "Step size for FREQ. Examples:\n"
                 "• DAILY + 1 → every day\n"
                 "• WEEKLY + 2 → every other week\n"
+                "• MONTHLY + 3 → every 3 months\n"
                 "• HOURLY + 6 → every 6 hours"
             ),
         )
 
-        # DTSTART baseline
-        start_cols = st.columns(2)
-        dtstart_date = start_cols[0].date_input(
-            "Start date (DTSTART)",
-            key=f"{self.ns}_sched_dtstart_date",
-            help="First eligible date for the schedule (exchange local date).",
-        )
-        dtstart_time = start_cols[1].time_input(
-            "Start time (DTSTART)",
-            value=dt.time(9, 30),
-            key=f"{self.ns}_sched_dtstart_time",
-            help="Local wall time in the exchange timezone. DST is preserved by Prefect.",
-        )
-
-        # Optional UNTIL
-        set_until = st.checkbox(
-            "Set end (UNTIL)",
-            key=f"{self.ns}_sched_set_until",
-            help="Optionally cap the schedule. The last occurrence will be at or before this local date/time.",
-        )
-        until_dt = None
-        if set_until:
-            until_cols = st.columns(2)
-            until_date = until_cols[0].date_input(
-                "End date",
-                key=f"{self.ns}_sched_until_date",
-                help="Final calendar date in the exchange timezone.",
-            )
-            until_time = until_cols[1].time_input(
-                "End time",
-                value=dt.time(23, 59),
-                key=f"{self.ns}_sched_until_time",
-                help=(
-                    "Final wall time in the exchange timezone.\n"
-                    "Prefect serializes this as UTC internally; local semantics are preserved."
-                ),
-            )
-            if until_date and until_time:
-                until_dt = dt.datetime.combine(until_date, until_time)
-
-        # Weekly BYDAY (only when relevant)
+        # WEEKLY BYDAY (only when relevant)
         byweekday = None
         if freq == "WEEKLY":
             byweekday = st.multiselect(
@@ -245,7 +220,62 @@ class Section:
                 help="Select one or more weekdays. Example: MO,WE,FR for Monday/Wednesday/Friday.",
             )
 
-        schedules: List[Dict[str, Any]] = []
+        # MONTHLY pattern switches
+        bymonthday: Optional[List[int]] = None
+        monthly_byweekday: Optional[List[str]] = None
+        bysetpos: Optional[List[int]] = None
+
+        if freq == "MONTHLY":
+            mode_monthly = st.radio(
+                "Monthly pattern",
+                options=["Day of month", "Nth weekday"],
+                horizontal=True,
+                key=f"{self.ns}_sched_monthly_mode",
+                help=(
+                    "Choose 'Day of month' for a specific date (e.g., 15th). "
+                    "Choose 'Nth weekday' for patterns like 1st Monday, 3rd Friday, or Last Friday."
+                ),
+            )
+
+            if mode_monthly == "Day of month":
+                day_choice = st.selectbox(
+                    "Day of month (BYMONTHDAY)",
+                    options=["1","2","3","4","5","6","7","8","9","10",
+                            "11","12","13","14","15","16","17","18","19","20",
+                            "21","22","23","24","25","26","27","28","29","30","31","Last day"],
+                    index=14,  # 15th by default
+                    key=f"{self.ns}_sched_bymonthday",
+                    help="Pick a calendar day. 'Last day' maps to -1.",
+                )
+                bymonthday = [-1] if day_choice == "Last day" else [int(day_choice)]
+                monthly_byweekday = None
+                bysetpos = None
+            else:
+                ordinal = st.selectbox(
+                    "Ordinal (BYSETPOS)",
+                    options=["1st","2nd","3rd","4th","5th","Last"],
+                    index=0,
+                    key=f"{self.ns}_sched_bysetpos",
+                    help="Which occurrence within the month.",
+                )
+                weekday = st.selectbox(
+                    "Weekday (BYDAY)",
+                    options=["MO", "TU", "WE", "TH", "FR", "SA", "SU"],
+                    index=0,
+                    key=f"{self.ns}_sched_monthly_byday",
+                    help="Weekday for the monthly pattern.",
+                )
+                ord_map = {"1st":1, "2nd":2, "3rd":3, "4th":4, "5th":5, "Last":-1}
+                bysetpos = [ord_map[ordinal]]
+                monthly_byweekday = [weekday]
+                bymonthday = None
+
+        # -----------------------
+        # TIMES (single or multi)
+        # -----------------------
+        times: Optional[List[dt.time]] = None
+        single_byhour = single_byminute = single_bysecond = None
+
         with st.expander("Times"):
             st.caption(
                 "Choose either a single time-of-day (below) or multiple times using CSV.\n"
@@ -277,39 +307,15 @@ class Section:
                     ),
                 )
                 try:
-                    times = parse_times_csv(times_csv)
+                    times = parse_times_csv(times_csv)  # -> list[dt.time]
                 except Exception as e:
                     st.error(str(e))
                     return (True, None)
-
-                # Build one schedule per time (no backend signature change required)
-                for t in times:
-                    dtstart_local = dt.datetime.combine(dtstart_date, t)
-                    if until_dt and until_dt <= dtstart_local: # Sanity check
-                        st.error("ALL UNTIL must be after DTSTART.")
-                        return (True, None)
-
-                    try:
-                        sched = self.api.build_schedule(
-                            timezone=tz_key,
-                            freq=freq,
-                            dtstart_local=dtstart_local,
-                            interval=int(interval),
-                            byweekday=byweekday,
-                            until_local=until_dt,
-                            byhour=t.hour,
-                            byminute=t.minute,
-                            bysecond=0,
-                        )
-                    except Exception as e:
-                        st.error(f"Schedule invalid for time {t}: {e}")
-                        return (True, None)
-                    schedules.append(sched)
             else:
                 # Single time-of-day controls (with disabling according to FREQ semantics)
                 disable_byhour = (freq in {"HOURLY", "MINUTELY"})
                 disable_byminute = (freq == "MINUTELY")
-                byhour = st.number_input(
+                single_byhour = st.number_input(
                     "BYHOUR (0–23)",
                     min_value=0, max_value=23,
                     value=dtstart_time.hour,
@@ -317,7 +323,7 @@ class Section:
                     disabled=disable_byhour,
                     help="Hour of day in exchange timezone. Ignored for HOURLY/MINUTELY.",
                 )
-                byminute = st.number_input(
+                single_byminute = st.number_input(
                     "BYMINUTE (0–59)",
                     min_value=0, max_value=59,
                     value=dtstart_time.minute,
@@ -325,7 +331,7 @@ class Section:
                     disabled=disable_byminute,
                     help="Minute of hour. Ignored for MINUTELY.",
                 )
-                bysecond = st.number_input(
+                single_bysecond = st.number_input(
                     "BYSECOND (0–59)",
                     min_value=0, max_value=59,
                     value=0,
@@ -333,35 +339,98 @@ class Section:
                     help="Second of minute. Example: 0 for on-the-minute.",
                 )
 
-                if not dtstart_date or not dtstart_time:
-                    st.error("Please choose a DTSTART date and time.")
-                    return (True, None)
+        # -------------
+        # UNTIL (last)
+        # -------------
+        set_until = st.checkbox(
+            "Set end (UNTIL)",
+            key=f"{self.ns}_sched_set_until",
+            help="Optionally cap the schedule. The last occurrence will be at or before this local date/time.",
+        )
 
-                dtstart_local = dt.datetime.combine(dtstart_date, dtstart_time)
-                if until_dt and until_dt <= dtstart_local: # Sanity check
-                    st.error("UNTIL must be after DTSTART.")
-                    return (True, None)
+        until_dt = None
+        if set_until:
+            until_cols = st.columns(2)
+            until_date = until_cols[0].date_input(
+                "End date",
+                key=f"{self.ns}_sched_until_date",
+                help="Final calendar date in the exchange timezone.",
+            )
+            until_time = until_cols[1].time_input(
+                "End time",
+                value=dt.time(23, 59),
+                key=f"{self.ns}_sched_until_time",
+                help=(
+                    "Final wall time in the exchange timezone.\n"
+                    "Prefect serializes this as UTC internally; local semantics are preserved."
+                ),
+            )
+            if until_date and until_time:
+                until_dt = dt.datetime.combine(until_date, until_time)
 
+        # ----------------------
+        # Build the schedules
+        # ----------------------
+        schedules: List[Dict[str, Any]] = []
+
+        if not dtstart_date or not dtstart_time:
+            st.error("Please choose a DTSTART date and time.")
+            return (True, None)
+
+        if times is not None:
+            # MULTI
+            for t in times:
+                dtstart_local = dt.datetime.combine(dtstart_date, t)
+                if until_dt and until_dt <= dtstart_local:
+                    st.error("ALL UNTIL must be after DTSTART.")
+                    return (True, None)
                 try:
-                    sched = self.api.build_schedule(
+                    sched = self.svc.build_schedule(
                         timezone=tz_key,
                         freq=freq,
                         dtstart_local=dtstart_local,
                         interval=int(interval),
-                        byweekday=byweekday,
+                        byweekday=(monthly_byweekday if freq == "MONTHLY" and monthly_byweekday else byweekday),
+                        bymonthday=bymonthday,
+                        bysetpos=bysetpos,
                         until_local=until_dt,
-                        byhour=int(byhour),
-                        byminute=int(byminute),
-                        bysecond=int(bysecond),
+                        byhour=t.hour,
+                        byminute=t.minute,
+                        bysecond=0,
                     )
                 except Exception as e:
-                    st.error(f"Schedule invalid: {e}")
+                    st.error(f"Schedule invalid for time {t}: {e}")
                     return (True, None)
                 schedules.append(sched)
+        else:
+            # SINGLE
+            dtstart_local = dt.datetime.combine(dtstart_date, dtstart_time)
+            if until_dt and until_dt <= dtstart_local:
+                st.error("UNTIL must be after DTSTART.")
+                return (True, None)
+            try:
+                sched = self.svc.build_schedule(
+                    timezone=tz_key,
+                    freq=freq,
+                    dtstart_local=dtstart_local,
+                    interval=int(interval),
+                    byweekday=(monthly_byweekday if freq == "MONTHLY" and monthly_byweekday else byweekday),
+                    bymonthday=bymonthday,
+                    bysetpos=bysetpos,
+                    until_local=until_dt,
+                    byhour=int(single_byhour) if single_byhour is not None else None,
+                    byminute=int(single_byminute) if single_byminute is not None else None,
+                    bysecond=int(single_bysecond) if single_bysecond is not None else None,
+                )
+            except Exception as e:
+                st.error(f"Schedule invalid: {e}")
+                return (True, None)
+            schedules.append(sched)
 
         if schedules:
             st.success(f"Schedule ready ({len(schedules)} rule{'s' if len(schedules)!=1 else ''}).")
         return (True, schedules if schedules else None)
+
 
     # ---- UI #2: Add config (identical structure; keys are prefixed) ----
     def render_adder(self):
@@ -383,7 +452,7 @@ class Section:
 
                 new_interval = st.selectbox("Interval", options=interval_options, index=0, key=f"{self.ns}_new_interval")
 
-                tz_key = svc_hist.get_exchange_tz(new_exchange)
+                tz_key = self.svc.get_exchange_tz(new_exchange)
                 st.caption(f"Data window in exchange timezone: {tz_key}")
 
                 startcol_date, startcol_time = st.columns(2)
@@ -428,9 +497,11 @@ class Section:
                         }
                         if use_sched and sched_payload:
                             cfg["schedules"] = sched_payload
-                            cfg["schedule_summary"] = summarize_schedules_for_ui(cfg["schedules"])
+                            cfg["schedule_active"] = None
+                            cfg["schedule_msg"] = ""
+                            cfg["schedule_mode"] = "PRIME"
 
-                        svc_hist.create_deployment(cfg)
+                        self.svc.create_deployment(cfg)
                         cfgs = self.get_cfgs()
                         cfgs.append(cfg)
                         self.set_cfgs(cfgs)
@@ -480,9 +551,11 @@ class Section:
                         }
                         if use_sched and sched_payload:
                             cfg["schedules"] = sched_payload
-                            cfg["schedule_summary"] = summarize_schedules_for_ui(cfg["schedules"])
+                            cfg["schedule_active"] = None
+                            cfg["schedule_msg"] = ""
+                            cfg["schedule_mode"] = "PRIME"
 
-                        svc_stream.create_deployment(cfg)
+                        self.svc.create_deployment(cfg)
                         cfgs = self.get_cfgs()
                         cfgs.append(cfg)
                         self.set_cfgs(cfgs)
@@ -495,26 +568,26 @@ class Section:
         for cfg in list(cfgs):
             if cfg.get("flow_run_id") and (cfg.get("flow_state") not in TERMINAL):
                 try:
-                    resp = self.api.check_flow_run_status(cfg["flow_run_id"])
-                    state = resp.get("state") or {}
-                    cfg["flow_state"] = state.get("type")  # e.g., RUNNING, COMPLETED
-                    if resp.get("name"):
-                        cfg["flow_run_name"] = resp["name"]
+                    self.svc.refresh_flow_state(cfg)
                 except Exception as e:
                     st.warning(f"Failed to check status for run {cfg['flow_run_id']}: {e}")
 
-            # deployment status
+            # deployment status (+ derive schedule state from deployment response)
             dep_status = "NOT_READY"
-            if cfg.get("deployment_id"):
-                try:
-                    dep_resp = self.api.check_deployment_status(cfg["deployment_id"])
-                    s = dep_resp.get("status")
-                    dep_status = s.get("status") if isinstance(s, dict) else (s or "NOT_READY")
-                except Exception:
-                    pass
+            dep_id = cfg.get("deployment_id")
+            if dep_id:
+                dep_status = self.svc.try_refresh_deployment_status(cfg, throttle_s=0.0)  # force-refresh
+                if dep_status == "DELETED" or cfg.get("deleted_on_server"):
+                    cfgs[:] = [c for c in cfgs if c["row_id"] != cfg["row_id"]]
+                    self.set_cfgs(cfgs)
+                    st.info(f"Deployment removed on server; deleted '{cfg['deployment_name']}' from UI.")
+                    self.mark_skip_refresh()
+                    st.rerun()
+                    return
 
+            is_scheduled_row = bool(cfg.get("schedules"))
             with st.container():
-                cols = st.columns([3, 3, 6, 6, 8], gap="small")
+                cols = st.columns([4, 3, 5, 8, 8], gap="small")
 
                 flow_run_id = cfg.get("flow_run_id")
                 flow_state  = cfg.get("flow_state")
@@ -523,23 +596,83 @@ class Section:
                 run_active    = bool(flow_run_id) and (not is_terminal)
 
                 buttons_enabled = has_never_run or is_terminal
-                can_trigger     = buttons_enabled and (dep_status == "READY")
+                can_trigger     = (not run_active) and buttons_enabled and (dep_status == "READY")
 
                 row_key = cfg["row_id"]
 
                 with cols[0]:
-                    if st.button(
-                        "Trigger",
-                        key=f"{self.ns}_trigger_{row_key}",
-                        disabled=not can_trigger,
-                        help=None if can_trigger else ("Deployment not READY" if dep_status != "READY" else "Run in progress"),
-                    ):
-                        fr_id, fr_name = self.run_deployment(cfg)
-                        cfg["flow_run_id"]   = fr_id
-                        cfg["flow_run_name"] = fr_name
-                        resp = self.api.check_flow_run_status(fr_id)
-                        cfg["flow_state"] = resp.get("state_type")
-                        self.mark_skip_refresh()
+                    if is_scheduled_row:
+                        mode = cfg.get("schedule_mode", "PRIME")
+
+                        # Decide label by mode
+                        label = {
+                            "PRIME":  "Schedule Runs",
+                            "ACTIVE": "Pause Schedule",
+                            "PAUSED": "Resume",
+                        }.get(mode, "Schedule Runs")
+
+                        # Disable logic:
+                        if label == "Schedule Runs":
+                            disabled = (dep_status != "READY")  # allow scheduling even if a run is active
+                            help_txt = None if not disabled else "Deployment not READY"
+                        else:
+                            disabled = False
+                            help_txt = None
+
+                        if st.button(
+                            label,
+                            key=f"{self.ns}_sched_{row_key}",
+                            disabled=disabled,
+                            help=help_txt,
+                        ):
+                            dep_id = cfg.get("deployment_id")
+
+                            # Handle each label’s action
+                            if label == "Schedule Runs":
+                                try:
+                                    self.svc.schedule_deployment(cfg)
+
+                                    self.svc.try_refresh_deployment_status(cfg, throttle_s=0.0)
+                                    self.mark_skip_refresh()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Failed to schedule: {e}")
+
+                            elif label == "Pause Schedule":
+                                # POST /api/deployments/{deployment_id}/pause_deployment
+                                try:
+                                    self.svc.pause_schedule(dep_id)
+
+                                    self.svc.try_refresh_deployment_status(cfg, throttle_s=0.0)
+                                    self.mark_skip_refresh()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Failed to pause schedule: {e}")
+
+                            else:  # "Resume"
+                                # POST /api/deployments/{deployment_id}/resume_deployment
+                                try:
+                                    self.svc.resume_schedule(dep_id)
+
+                                    self.svc.try_refresh_deployment_status(cfg, throttle_s=0.0)
+                                    self.mark_skip_refresh()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Failed to resume schedule: {e}")
+                    else:
+                        # ORIGINAL Trigger button, with the earlier minimal change you accepted:
+                        # can_trigger = (not run_active) and buttons_enabled and (dep_status == "READY")
+                        if st.button(
+                            "Trigger",
+                            key=f"{self.ns}_trigger_{row_key}",
+                            disabled=not can_trigger,
+                            help=None if can_trigger else ("Deployment not READY" if dep_status != "READY" else "Run in progress"),
+                        ):
+                            fr_id, fr_name = self.run_deployment(cfg)
+                            cfg["flow_run_id"]   = fr_id
+                            cfg["flow_run_name"] = fr_name
+                            self.svc.refresh_flow_state(cfg)
+                            self.mark_skip_refresh()
 
                 with cols[1]:
                     if st.button(
@@ -548,30 +681,21 @@ class Section:
                         disabled=run_active,
                         help=None if not run_active else "Disabled while run is active",
                     ):
-                        if cfg.get("deployment_id"):
+                        dep_id = cfg.get("deployment_id")
+                        if dep_id:
+                            # DELETE /api/deployments/{deployment_id}
                             try:
-                                resp = self.api.delete_deployment(cfg["deployment_id"])
+                                self.svc.delete_active_deployment(dep_id)
                             except Exception as e:
                                 logger.exception("Delete API failed for %s", cfg["deployment_id"])
                                 st.error(f"Delete failed: {e}")
-                            else:
-                                deleted = bool(resp.get("deleted")) if isinstance(resp, dict) else False
-                                if deleted:
-                                    cfgs[:] = [c for c in cfgs if c["row_id"] != cfg["row_id"]]
-                                    self.set_cfgs(cfgs)
-                                    st.success(f"Deleted configuration: {cfg['deployment_name']}")
-                                    self.mark_skip_refresh()
-                                    st.rerun()
-                                else:
-                                    st.warning(f"Unexpected delete response: {resp!r}")
-
-                        # Remove from the *live* list in-place and persist
+                                return
+                        # Remove locally exactly once
                         cfgs[:] = [c for c in cfgs if c["row_id"] != cfg["row_id"]]
                         self.set_cfgs(cfgs)
-
                         st.success(f"Deleted configuration: {cfg['deployment_name']}")
                         self.mark_skip_refresh()
-                        st.rerun()   # or st.stop()
+                        st.rerun()
 
                 with cols[2]:
                     st.markdown('<div class="small-label">Dep Name</div>', unsafe_allow_html=True)
@@ -579,11 +703,23 @@ class Section:
                     st.markdown('<div class="small-label">Dep Status</div>', unsafe_allow_html=True)
                     st.markdown(f'<div class="value-strong">{dep_status}</div>', unsafe_allow_html=True)
 
+                    if is_scheduled_row:
+                        if cfg.get("schedule_msg"):
+                            st.markdown('<div class="small-label">Schedule Status</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="value-strong">{cfg["schedule_msg"]}</div>', unsafe_allow_html=True)
+
                 with cols[3]:
-                    st.markdown('<div class="small-label">Run Name</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="value-strong">{cfg.get("flow_run_name") or "—"}</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="small-label">Run Status</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="value-strong">{cfg.get("flow_state") or "—"}</div>', unsafe_allow_html=True)
+                    if is_scheduled_row:
+                        st.markdown('<div class="small-label">Schedule</div>', unsafe_allow_html=True)
+                        source = (cfg.get("server_schedules") or (cfg.get("schedules") or []))
+                        summary = summarize_schedules_for_ui(source, show_dtstart=True)
+                        st.markdown(f'<div class="value-strong">{summary}</div>', unsafe_allow_html=True)
+
+                    else:
+                        st.markdown('<div class="small-label">Run Name</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="value-strong">{cfg.get("flow_run_name") or "—"}</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="small-label">Run Status</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="value-strong">{cfg.get("flow_state") or "—"}</div>', unsafe_allow_html=True)
 
                 with cols[4]:
                     if self.mode == "hist":
@@ -595,10 +731,6 @@ class Section:
                         st.markdown(
                             f"{cfg['ticker']}.{cfg['exchange']} | stream={cfg['stream_type']} | duration={cfg['duration']}s"
                         )
-                    summary = cfg.get("schedule_summary") or summarize_schedules_for_ui(cfg.get("schedules") or [])
-                    if summary:
-                        st.markdown('<div class="small-label">Schedule</div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="value-strong">{summary}</div>', unsafe_allow_html=True)
 
             st.divider()
 
@@ -606,25 +738,38 @@ class Section:
     def auto_poll(self):
         cfgs = self.get_cfgs()
 
+        any_dep_deleted = False
+        any_dep_not_ready = False
+
+        # One throttled refresh per row; the service handles caching/404/schedule fields
+        for c in cfgs:
+            status = self.svc.try_refresh_deployment_status(c, throttle_s=3.0)
+            if status == "DELETED":
+                any_dep_deleted = True
+            elif status != "READY":
+                any_dep_not_ready = True
+
         any_run_active = any(
             c.get("flow_run_id") and (c.get("flow_state") not in TERMINAL)
             for c in cfgs
         )
 
-        any_dep_not_ready = any(
-            (self.api.check_deployment_status(c["deployment_id"]).get("status") != "READY")
-            for c in cfgs if c.get("deployment_id")
-        )
+        # If we saw deletions, drop them immediately and re-render
+        if any_dep_deleted:
+            self.set_cfgs([c for c in cfgs if not c.get("deleted_on_server")])
+            self.mark_skip_refresh()
+            st.rerun()
+            return
 
         needs_refresh = any_run_active or any_dep_not_ready
 
-        # Instant UI update right after a button click (no sleep)
         if self.pop_skip_refresh() and needs_refresh:
             st.rerun()
+            return
 
-        # Non-blocking periodic refresh driven by the browser
         if needs_refresh:
-            st_autorefresh(interval=1000, key=f"{self.ns}_autopoll")  # 1s
+            interval = 1000 if any_run_active else 3000
+            st_autorefresh(interval=interval, key=f"{self.ns}_autopoll")
 
     def render(self):
         self.render_adder()

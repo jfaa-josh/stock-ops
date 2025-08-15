@@ -1,330 +1,314 @@
-import time
-import json
-from datetime import datetime, UTC, date, time as dtime
-from typing import Iterable, Optional, Any
-import random
+# dummy_api_backend.py
 import logging
-import streamlit as st
+import time
 import uuid
-from zoneinfo import ZoneInfo
-
-from stockops.config import utils as cfg_utils # Add additional providers to config utils as needed
-
-STRICT_TYPECHECK = False  # set True to raise on failures FOR TESTING ONLY
-
-def _typename(x):
-    return type(x).__name__
-
-# ============ Dummy API with session-backed state ============
-def _ensure_api_state():
-    st.session_state.setdefault("_deployments", {})  # deployment_id -> dict
-    st.session_state.setdefault("_flow_runs", {})    # flow_run_id   -> dict
+from typing import Dict, Any, Union, List
+from datetime import datetime, timezone
+import requests
 
 logger = logging.getLogger(__name__)
 
-# simple slug generator for flow run names (e.g., "judicious_shrimp")
-_ADJS = [
-    "brisk", "careful", "diligent", "eager", "fearless", "gentle", "humble",
-    "judicious", "keen", "lively", "mindful", "noble", "orderly", "patient",
-    "quick", "robust", "steadfast", "tactful", "upbeat", "vivid", "wise", "youthful", "zesty"
-]
-_NOUNS = [
-    "otter", "shrimp", "falcon", "lynx", "badger", "heron", "salmon", "sparrow",
-    "walrus", "beaver", "cricket", "beetle", "panther", "ibis", "iguana", "swift",
-    "tern", "seal", "puffin", "ferret", "marmot", "stoat", "fox", "jay"
-]
-def _slug():
-    return f"{random.choice(_ADJS)}_{random.choice(_NOUNS)}"
 
-class DummyAPI:
-    _EXPECTED_SCHEMAS = {
-        "fetch_historical": {
-            "ticker": str,
-            "exchange": str,
-            "interval": str,
-            "start": str,
-            "end": str,
-        },
-        "stream_live": {
-            "ticker": str,
-            "exchange": str,
-            "streamType": str,  # "trades" | "quotes"
-            "duration": int,    # seconds
-        },
-    }
+class DummyAPIBackend:
+    """
+    Local-only dummy backend that mimics APIBackend's interface and returns realistic
+    Prefect-like responses without touching the network.
 
-    def get_tz(self, provider: str, exchange: str = "US") -> str:
-        cfg = cfg_utils.ProviderConfig(provider, exchange)
-        return cfg.tz_str
+    Intended for end-to-end UI debugging and contract testing.
+    """
 
-    def _validate_and_log_call(self, deployment_id, provider, command_type, command):
-        # Top-level param checks
-        top_checks = {
-            "deployment_id": (deployment_id, str),
-            "provider":      (provider, str),
-            "command_type":  (command_type, str),
-            "command":       (command, dict),
+    # --- construction ---------------------------------------------------------
+    def __init__(self, flow_name: str):
+        self.api_url = "http://dummy-prefect.local/api"
+        self.api_version = self.get_api_version()
+
+        # in-memory stores
+        self._flows: Dict[str, Dict[str, Any]] = {}
+        self._deployments: Dict[str, Dict[str, Any]] = {}
+        self._schedules: Dict[str, Dict[str, Any]] = {}  # kept for compatibility; no longer authoritative
+        self._flow_runs: Dict[str, Dict[str, Any]] = {}
+
+        # register the controller flow, like the real backend does
+        self.flow_id = self.register_controller_flow(flow_name)
+
+    # --- helpers --------------------------------------------------------------
+    @staticmethod
+    def _new_id(prefix: str = "") -> str:
+        return (prefix + "-" if prefix else "") + uuid.uuid4().hex[:12]
+
+    def _now(self) -> float:
+        return time.time()
+
+    def _now_iso(self) -> str:
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _require_deployment(self, deployment_id: str) -> Dict[str, Any]:
+        dep = self._deployments.get(deployment_id)
+        if not dep:
+            raise ValueError(f"Deployment not found: {deployment_id}")
+        return dep
+
+    def _require_flow_run(self, flow_run_id: str) -> Dict[str, Any]:
+        fr = self._flow_runs.get(flow_run_id)
+        if not fr:
+            raise ValueError(f"Flow run not found: {flow_run_id}")
+        return fr
+
+    # --- parity with real APIBackend -----------------------------------------
+    def get_api_version(self) -> str:
+        # Pretend we hit /admin/version and got a version string
+        version = "3.0.0-dummy"
+        logger.info("Detected Prefect API version (dummy): %s", version)
+        return version
+
+    def build_headers(self) -> dict:
+        # Not used, but kept for parity
+        return {
+            "Content-Type": "application/json",
+            "x-prefect-api-version": self.api_version,
         }
 
-        top_results = {}
-        for name, (val, expected) in top_checks.items():
-            ok = isinstance(val, expected)
-            top_results[name] = {"ok": ok, "got": _typename(val), "expected": expected.__name__}
+    # flows --------------------------------------------------------------------
+    def register_controller_flow(self, flow_name: str):
+        # Mimic POST /flows/ -> {'id': ...}
+        existing = next((fid for fid, f in self._flows.items() if f["name"] == flow_name), None)
+        if existing:
+            logger.info("Flow %s already registered (dummy): %s", flow_name, existing)
+            return existing
+        fid = self._new_id("flow")
+        self._flows[fid] = {"id": fid, "name": flow_name, "created": self._now()}
+        logger.info("Registered flow (dummy): %s", flow_name)
+        return fid
 
-        # Command schema checks (if we have a schema for this command_type)
-        cmd_schema = self._EXPECTED_SCHEMAS.get(command_type, {})
-        field_results = {}
-        for k, expected_t in cmd_schema.items():
-            v = None if not isinstance(command, dict) else command.get(k, None)
-            ok = isinstance(v, expected_t)
-            field_results[k] = {"ok": ok, "got": _typename(v), "expected": expected_t.__name__}
-
-        # Pretty log to terminal
-        lines = []
-        lines.append("─" * 72)
-        lines.append("DummyAPI.run_deployed_flow called with:")
-        lines.append(f"  deployment_id: {deployment_id!r} ({_typename(deployment_id)})")
-        lines.append(f"  provider     : {provider!r} ({_typename(provider)})")
-        lines.append(f"  command_type : {command_type!r} ({_typename(command_type)})")
-        lines.append(f"  command dict : ({_typename(command)}) ->")
-        if isinstance(command, dict):
-            for ck, cv in command.items():
-                lines.append(f"      - {ck}: {cv!r} ({_typename(cv)})")
-        else:
-            lines.append("      <not a dict>")
-
-        lines.append("Top-level type checks:")
-        for name, res in top_results.items():
-            status = "PASS" if res["ok"] else "FAIL"
-            lines.append(f"  [{status}] {name}: expected {res['expected']}, got {res['got']}")
-
-        if cmd_schema:
-            lines.append(f"Command schema checks for {command_type!r}:")
-            for name, res in field_results.items():
-                status = "PASS" if res["ok"] else "FAIL"
-                lines.append(f"  [{status}] {name}: expected {res['expected']}, got {res['got']}")
-        else:
-            lines.append(f"(No schema registered for command_type={command_type!r}; skipping field checks)")
-
-        lines.append("─" * 72)
-        logger.info("\n".join(lines))
-
-        # Decide pass/fail
-        ok_top = all(res["ok"] for res in top_results.values())
-        ok_cmd = True if not cmd_schema else all(res["ok"] for res in field_results.values())
-        all_ok = ok_top and ok_cmd
-
-        if STRICT_TYPECHECK and not all_ok:
-            # Raise a helpful error with specifics
-            problems = []
-            problems += [f"{k}: expected {v['expected']}, got {v['got']}" for k, v in top_results.items() if not v["ok"]]
-            problems += [f"{k}: expected {v['expected']}, got {v['got']}" for k, v in field_results.items() if not v["ok"]]
-            raise TypeError("Type check failed for run_deployed_flow params:\n  - " + "\n  - ".join(problems))
-
-        return all_ok
-
-    def register_deployment(self, deployment_name: str,
-                            schedules: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        _ensure_api_state()
-        dep_id = str(uuid.uuid4())
-        # simulate a NOT_READY → READY transition after a few seconds
-        st.session_state["_deployments"][dep_id] = {
-            "id": dep_id,
+    # deployments --------------------------------------------------------------
+    def register_deployment(self, deployment_name: str):
+        # Mimic POST /deployments/ -> deployment object
+        # The real code sends flow_id, path, entrypoint, work_pool_name, etc.
+        did = self._new_id("dep")
+        dep = {
+            "id": did,
             "name": deployment_name,
-            "schedules": schedules,
-            "created_ts": time.time(),
-            "status": "NOT_READY",   # will become READY after ~3s
+            "flow_id": self.flow_id,
+            "status": {"status": "READY"},  # UI code supports string OR dict
+            "created": self._now(),
+            "path": "/app/prefect",
+            "entrypoint": "data_pipeline_flow.py:controller_driver_flow",
+            "work_pool_name": "default",
+            "enforce_parameter_schema": False,
+            # fields your UI expects on GET:
+            "paused": False,
+            "schedules": [],  # list of schedule records
         }
+        self._deployments[did] = dep
+        logger.info("Registering deployment (dummy): %s", deployment_name)
+        return dep
 
-        try:
-            if schedules:
-                rrules = []
-                for i, sch in enumerate(schedules, 1):
-                    sched = sch.get("schedule") or {}
-                    tz = sched.get("timezone", "UNKNOWN_TZ")
-                    rr = sched.get("rrule", "").strip()
-                    rrules.append(f"[{i}] timezone={tz}\n{rr}")
-                logger.info(
-                    "Registering deployment %r with %d schedule(s):\n%s",
-                    deployment_name, len(schedules), "\n\n".join(rrules)
-                )
-                logger.debug(
-                    "Full schedules payload JSON:\n%s",
-                    json.dumps(schedules, indent=2, sort_keys=True)
-                )
-            else:
-                logger.info("Registering deployment %r with no schedules", deployment_name)
-        except Exception:
-            logger.exception("Failed to log schedules")
+    def check_deployment_status(self, deployment_id: str):
+        # Mimic GET /deployments/{id}
+        dep = self._require_deployment(deployment_id)
+        # Optionally simulate a brief NOT_READY window just after creation
+        age = self._now() - dep["created"]
+        if age < 1.0:
+            # Return the same shape but NOT_READY status
+            return {
+                **dep,
+                "status": {"status": "NOT_READY"},
+            }
+        # Return the record including paused + schedules
+        return dep
 
-        return {"id": dep_id, "name": deployment_name}
+    def create_deployment_schedules(
+        self, deployment_id: str, payload: list[dict]
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Dummy version: simulates Prefect 3 'Create Deployment Schedules' response
+        without performing a real HTTP call. Intended for TEST_MODE.
 
-    def check_deployment_status(self, deployment_id):
-        _ensure_api_state()
-        meta = st.session_state["_deployments"].get(deployment_id)
-        if not meta:
-            return {"status": "NOT_READY"}
-        # promote to READY ~3s after creation
-        if (time.time() - meta["created_ts"]) >= 3 and meta["status"] != "READY":
-            meta["status"] = "READY"
-            st.session_state["_deployments"][deployment_id] = meta
-        return {"status": meta["status"]}
+        Returns a dict with a top-level 'schedules' list, where each item looks like
+        what Prefect would return (id/created/updated/schedule/deployment_id/active/parameters/...).
+        """
+        path = f"/deployments/{deployment_id}/schedules"
+        logger.info("Creating deployment schedules (DUMMY)... path=%s", path)
+        logger.debug("Payload (DUMMY): %s", payload)
 
-    def delete_deployment(self, deployment_id):
-        _ensure_api_state()
-        st.session_state["_deployments"].pop(deployment_id, None)
-        # clean up any flow runs tied to this deployment
-        to_del = [fr for fr, fm in st.session_state["_flow_runs"].items()
-                  if fm.get("deployment_id") == deployment_id]
-        for fr in to_del:
-            st.session_state["_flow_runs"].pop(fr, None)
-        return {"deleted": True}
+        dep = self._require_deployment(deployment_id)
 
-    def run_deployed_flow(self, deployment_id, provider, command_type, command):
-        _ensure_api_state()
+        # ---- basic validation mirroring expectations ----
+        if not isinstance(payload, list) or not payload:
+            raise ValueError("Payload must be a non-empty list of schedule objects.")
 
-        # >>> NEW: log + runtime type checks
-        self._validate_and_log_call(deployment_id, provider, command_type, command)
-        # <<<
+        now_iso = self._now_iso()
+        created_scheds: list[Dict[str, Any]] = []
 
-        if deployment_id not in st.session_state["_deployments"]:
-            raise ValueError("Deployment does not exist")
+        for i, item in enumerate(payload, start=1):
+            if not isinstance(item, dict):
+                raise ValueError(f"Payload[{i-1}] must be a dict.")
+            schedule_obj = item.get("schedule")
+            if not isinstance(schedule_obj, dict):
+                raise ValueError(f"Payload[{i-1}]['schedule'] must be a dict.")
+            # optional fields
+            active = bool(item.get("active", True))
+            max_runs = item.get("max_scheduled_runs")
+            params = item.get("parameters") or {}
+            slug = item.get("slug") or f"dummy-{deployment_id[:8]}-{i}"
 
-        flow_run_id = str(uuid.uuid4())
-        name = _slug()
-        st.session_state["_flow_runs"][flow_run_id] = {
-            "id": flow_run_id,
-            "name": name,
+            # Simulated schedule record as Prefect would echo back
+            rec = {
+                "id": str(uuid.uuid4()),
+                "created": now_iso,
+                "updated": now_iso,
+                "schedule": schedule_obj,          # echo what you sent (RRule/Cron/Interval object)
+                "deployment_id": deployment_id,
+                "active": active,
+                "max_scheduled_runs": (
+                    int(max_runs) if isinstance(max_runs, int) and max_runs > 0 else None
+                ),
+                "parameters": params,
+                "slug": slug,
+            }
+            created_scheds.append(rec)
+
+        # ---- persist on the deployment so subsequent GETs see them ----
+        dep["schedules"].extend(created_scheds)
+
+        # (legacy) keep _schedules mapping pointing to "last created" schedule for this deployment
+        # to preserve compatibility with any old code that referenced it
+        if created_scheds:
+            self._schedules[deployment_id] = created_scheds[-1]
+
+        response: Dict[str, Any] = {
+            "id": str(uuid.uuid4()),
+            "created": now_iso,
+            "updated": now_iso,
             "deployment_id": deployment_id,
-            "command": command,
-            "start_ts": time.time(),
-            "state_type": "PENDING",
+            "schedules": created_scheds,
         }
-        return {"name": name, "id": flow_run_id}
 
-    def check_flow_run_status(self, flow_run_id):
-        _ensure_api_state()
-        meta = st.session_state["_flow_runs"].get(flow_run_id)
-        if not meta:
-            return {"state_name": None, "state_type": None, "name": None}
+        logger.debug("Response (DUMMY): %s", response)
+        return response
 
-        # simple time-based state machine
-        elapsed = time.time() - meta["start_ts"]
-        if elapsed < 5:
-            state = "PENDING"
-        elif elapsed < 15:
-            state = "RUNNING"
+    def pause_deployment_schedule(self, deployment_id: str) -> None:
+        dep = self._deployments.get(deployment_id)
+        if not dep:
+            msg = f"HTTP 404 /api/deployments/{deployment_id}/pause_deployment — Deployment not found"
+            logger.error(msg)
+            raise requests.exceptions.HTTPError(msg)
+
+        dep["paused"] = True
+
+        logger.info("Paused deployment (dummy): %s", deployment_id)
+        return None
+
+    def resume_deployment_schedule(self, deployment_id: str) -> None:
+        dep = self._deployments.get(deployment_id)
+        if not dep:
+            msg = f"HTTP 404 /api/deployments/{deployment_id}/resume_deployment — Deployment not found"
+            logger.error(msg)
+            raise requests.exceptions.HTTPError(msg)
+
+        dep["paused"] = False
+
+        logger.info("Resumed deployment (dummy): %s", deployment_id)
+        return None
+
+    # flow runs ---------------------------------------------------------------
+    def run_deployed_flow(
+        self,
+        deployment_id: str,
+        provider: str,
+        command_type: str,
+        command: dict,
+    ):
+        """
+        Mimic POST /deployments/{id}/create_flow_run
+        Validates minimal command contents, returns a flow run object.
+        """
+        dep = self._require_deployment(deployment_id)
+
+        # Minimal validation by command_type
+        if command_type == "fetch_historical":
+            required = ["ticker", "exchange", "interval", "start", "end"]
+            missing = [k for k in required if k not in command or not command[k]]
+            if missing:
+                msg = f"Missing parameters for {command_type}: {', '.join(missing)}"
+                logger.error(msg)
+                return {"error": "BadRequest", "detail": msg}
+        elif command_type == "start_stream":
+            try:
+                dur = int(command.get("duration", 0))
+                if dur <= 0:
+                    raise ValueError
+            except Exception:
+                msg = "Invalid 'duration' for start_stream; expected positive integer"
+                logger.error(msg)
+                return {"error": "BadRequest", "detail": msg}
         else:
-            state = "COMPLETED"
+            msg = f"Unknown command_type: {command_type}"
+            logger.error(msg)
+            return {"error": "BadRequest", "detail": msg}
 
-        meta["state_type"] = state
-        st.session_state["_flow_runs"][flow_run_id] = meta
+        fr_id = self._new_id("run")
+        name = f"{dep['name']}-{fr_id[-6:]}"
+        created = self._now()
 
-        start_iso = datetime.fromtimestamp(meta["start_ts"], UTC).isoformat().replace("+00:00", "Z")
-        end_iso = None
-        if state in {"COMPLETED", "FAILED", "CANCELLED", "CRASHED"}:
-            end_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        # Store with a deterministic lifecycle: RUNNING for 5s, then COMPLETED
+        self._flow_runs[fr_id] = {
+            "id": fr_id,
+            "name": name,
+            "deployment_id": dep["id"],
+            "parameters": {
+                "provider": provider,
+                "command_type": command_type,
+                "command": command,
+            },
+            "state": {"type": "RUNNING", "name": "Running"},
+            "created": created,
+        }
+        logger.info("Started flow run (dummy): %s", fr_id)
+
+        # Real endpoint returns a run object; keep it close
+        return {
+            "id": fr_id,
+            "name": name,
+            "state_type": "RUNNING",
+            "deployment_id": dep["id"],
+        }
+
+    def check_flow_run_status(self, flow_run_id: str):
+        """
+        Mimic GET /flow_runs/{id}
+        Returns nested 'state' with {'type': ...} and a 'name'; UI normalizer supports both.
+        """
+        fr = self._require_flow_run(flow_run_id)
+        age = self._now() - fr["created"]
+        if age >= 5.0 and fr["state"]["type"] not in {"COMPLETED", "FAILED", "CANCELLED", "CRASHED"}:
+            # deterministically complete after 5 seconds
+            fr["state"] = {"type": "COMPLETED", "name": "Completed"}
 
         return {
-            "id": flow_run_id,
-            "name": meta["name"],
-            "state_name": state,
-            "state_type": state,
-            "start_time": start_iso,
-            "end_time": end_iso,
+            "id": fr["id"],
+            "name": fr["name"],
+            "deployment_id": fr["deployment_id"],
+            "state": fr["state"],  # {'type': 'RUNNING'|'COMPLETED', ...}
         }
 
-    def build_schedule(
-        self,
-        *,
-        timezone: str,
-        freq: str,                           # MINUTELY | HOURLY | DAILY | WEEKLY | MONTHLY | YEARLY
-        dtstart_local: datetime,
-        interval: int = 1,
-        byweekday: Optional[Iterable[str]] = None,   # e.g. ["MO","TU","WE"]
-        bymonth: Optional[Iterable[int]] = None,
-        bymonthday: Optional[Iterable[int]] = None,
-        bysetpos: Optional[Iterable[int]] = None,
-        until_local: Optional[datetime | date] = None,
-        byhour: Optional[int] = None,
-        byminute: Optional[int] = None,
-        bysecond: Optional[int] = None,
-        active: bool = True,
-    ) -> dict:
-        valid_freq = {"MINUTELY", "HOURLY", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"}
-        if freq not in valid_freq:
-            raise ValueError(f"Invalid FREQ: {freq}")
-        if interval <= 0:
-            raise ValueError("INTERVAL must be a positive integer")
+    def delete_deployment(self, deployment_id: str) -> None:
+        dep = self._deployments.pop(deployment_id, None)
+        if not dep:
+            msg = f"HTTP 404 /api/deployments/{deployment_id} — Deployment not found"
+            logger.error(msg)
+            raise requests.exceptions.HTTPError(msg)
 
-        tz = ZoneInfo(timezone)
-        if dtstart_local.tzinfo is None:
-            dtstart_aware = dtstart_local.replace(tzinfo=tz)
-        else:
-            dtstart_aware = dtstart_local.astimezone(tz)
+        # Remove schedules
+        removed_scheds = self._schedules.pop(deployment_id, [])
+        n_sched = len(removed_scheds)
 
-        # Default time parts from DTSTART
-        h = dtstart_aware.hour if byhour is None else int(byhour)
-        m = dtstart_aware.minute if byminute is None else int(byminute)
-        s = dtstart_aware.second if bysecond is None else int(bysecond)
+        # Remove flow runs tied to this deployment
+        to_delete_runs = [rid for rid, fr in self._flow_runs.items() if fr["deployment_id"] == deployment_id]
+        for rid in to_delete_runs:
+            self._flow_runs.pop(rid, None)
+        n_runs = len(to_delete_runs)
 
-        parts = [f"FREQ={freq}", f"INTERVAL={interval}"]
-
-        if byweekday:
-            wd = [w.strip().upper() for w in byweekday]
-            allowed = {"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
-            if not set(wd).issubset(allowed):
-                raise ValueError(f"Invalid BYDAY tokens: {byweekday}")
-            parts.append(f"BYDAY={','.join(wd)}")
-
-        def _join_ints(name: str, values: Optional[Iterable[int]], lo: int, hi: int):
-            if values is None:
-                return
-            vals = list(values)
-            for v in vals:
-                if v < lo or v > hi:
-                    raise ValueError(f"{name} value {v} out of range [{lo},{hi}]")
-            parts.append(f"{name}=" + ",".join(str(v) for v in vals))
-
-        _join_ints("BYMONTH", bymonth, 1, 12)
-        _join_ints("BYMONTHDAY", bymonthday, -31, 31)
-        _join_ints("BYSETPOS", bysetpos, -366, 366)
-
-        # Emit BY* fields conditionally to avoid restricting HOURLY/MINUTELY too much
-        if freq in {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}:
-            parts.append(f"BYHOUR={h}")
-            parts.append(f"BYMINUTE={m}")
-            parts.append(f"BYSECOND={s}")
-        elif freq == "HOURLY":
-            parts.append(f"BYMINUTE={m}")
-            parts.append(f"BYSECOND={s}")
-        elif freq == "MINUTELY":
-            parts.append(f"BYSECOND={s}")
-
-        # UNTIL handling (RFC 5545): if datetime -> convert to UTC and suffix Z; if date -> end-of-day local then convert
-        if until_local is not None:
-            if isinstance(until_local, date) and not isinstance(until_local, datetime):
-                until_dt = datetime.combine(until_local, dtime(23, 59, 59))
-            else:
-                until_dt = until_local  # type: ignore[assignment]
-
-            if until_dt.tzinfo is None:
-                until_localized = until_dt.replace(tzinfo=tz)
-            else:
-                until_localized = until_dt.astimezone(tz)
-
-            until_utc = until_localized.astimezone(ZoneInfo("UTC"))
-            parts.append("UNTIL=" + until_utc.strftime("%Y%m%dT%H%M%SZ"))
-
-        rrule_value = ";".join(parts)
-
-        result: dict[str, Any] = {
-            "active": bool(active),
-            "schedule": {
-                "rrule": rrule_value,
-                "timezone": timezone,
-                "dtstart": dtstart_aware.replace(microsecond=0).isoformat(),  # "2025-08-12T09:30:00-04:00"
-            },
-        }
-
-        return result
+        logger.info("Deleted deployment (dummy): %s; removed schedules=%d, flow_runs=%d",
+                    deployment_id, n_sched, n_runs)
+        return None
