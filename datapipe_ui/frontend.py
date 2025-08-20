@@ -2,13 +2,9 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 from dataclasses import dataclass, field
 from typing import Any, Literal, Tuple, Optional, List, Dict
-import sys
+import sys, string, uuid, os, random
 import logging
-import random
-import string
-import uuid
 import datetime as dt
-import os
 from zoneinfo import ZoneInfo
 
 from api_factory import ApiLike, make_api

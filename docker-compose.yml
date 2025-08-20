@@ -35,6 +35,38 @@ services:
       timeout: 5s                                     # Timeout per check
       retries: 5                                      # Number of retries before marking unhealthy
 
+  writer-service:                                     # Defines the buffer & sqlite writer-service container
+    <<: *common-envfile                               # Load common .env file for environment variables
+    build:                                            # Build a custom image ahead of runtime
+      context: .                                      # └─ use this repo as build context
+      dockerfile: docker/Dockerfile.writer            # └─ path to our optimized server Dockerfile
+      args:                                           # └─ pass your version args into the build
+        PYTHON_VERSION: ${PYTHON_VERSION}
+    image: writer-service                             # Tag for the built image
+    depends_on:
+      redis:
+        condition: service_healthy                    # Wait for Redis to be ready
+    environment:                                      # Define environment variables for the container
+      <<: *common-envvars                             # Inherit common environment variables
+      REDIS_URL: redis://redis:6379/1                 # Redis connection URL (host:port/db) (use DB1; DB0 is used by prefect)
+      PYTHONDONTWRITEBYTECODE: 1                      # Prevents Python from writing __pycache__ clutter to container
+      PYTHONUNBUFFERED: 1                             # Forces stdout/stderr logs to flush, appear in `docker logs` in real time
+      BUFFER_STREAM: buf:ingest                       # Name of the Redis stream used for buffering ingest data
+      DB_DATA_DIR: /app/data                          # Define a variable to reference in src config for local .db storage directory
+      BUFFER_BATCH: "500"                             # Maximum number of messages pulled from the Redis buffer in a single batch
+      BUFFER_BLOCK_MS: "10000"                        # Latency control: max ms buffer blocks while waiting for new messages
+      BUFFER_TRIM_MAXLEN: "100000"                    # keep stream bounded (approximate)
+    volumes:
+      - ./data:/app/data                              # bind local data directory for .db file storage in the container
+    command: ["python", "src/stockops/data/database/writer.py"]   # Command to run when container starts (entrypoint)
+    healthcheck:                                      # Health check for writer-service
+      test: ["CMD-SHELL", "kill -0 1"]
+      # └─ checks if the Python process for writer.py is running; exit 1 if not
+      interval: 10s                                   # Run check every 10 seconds
+      timeout: 5s                                     # Fail if it takes >5s
+      retries: 5                                      # Mark unhealthy after 5 failed checks
+      start_period: 10s                               # Give it 10s to warm up before checking
+
   prefect-server:                                     # Prefect API + services container
     <<: *common-envfile                               # Load common .env file for environment variables
     build:                                            # Build a custom image ahead of runtime
@@ -83,11 +115,13 @@ services:
     depends_on:
       prefect-server:
         condition: service_healthy                    # Wait until Prefect server is healthy
-
+      writer-service:
+        condition: service_healthy                    # Wait until writer-service is healthy
     environment:                                      # Prefect configuration variables
       <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api # API URL for the worker to pull jobs
-      DB_DATA_DIR: /app/data                          # Define a variable to reference in src config for local .db storage directory
+      REDIS_URL: redis://redis:6379/1                 # Access to Redis DB1 for writer-service connect
+      BUFFER_STREAM: buf:ingest                       # Env for Redis stream used by writer-service
     command: >                                        # Create default pool (if missing); Start a forever-running worker polling 'default':
       bash -c "
         prefect work-pool create default --type process --set-as-default || true &&
@@ -99,8 +133,6 @@ services:
       timeout: 5s                                     # Timeout each check after 5 seconds
       retries: 5                                      # Retry up to 5 times before marking unhealthy
       start_period: 10s                               # Wait 10 seconds before starting health checks
-    volumes:
-      - ./data:/app/data                              # bind local data directory for .db file storage in the container
 
   streamlit:                                          # Streamlit UI container
     <<: *common-envfile                               # Load common .env file for environment variables

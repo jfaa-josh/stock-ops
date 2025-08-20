@@ -22,6 +22,9 @@ ui = [
   "streamlit-autorefresh",
   "requests"
 ]
+writer = [
+  "redis",
+]
 
 [dependency-groups]
 dev = [
@@ -33,6 +36,7 @@ dev = [
     "pytest-cov",
     "pytest-asyncio",
     "python-dotenv",
+    "fakeredis",
 
     # These are repeated here for local dev only to avoid errors
     "streamlit",

@@ -1,11 +1,16 @@
 import asyncio
 import json
 import logging
+from pathlib import Path
+from typing import cast
+from zoneinfo import ZoneInfo
 
 import websockets
 
-from stockops.config import eodhd_config as cfg
+from stockops.config import config, eodhd_config
+from stockops.data.database.write_buffer import emit
 from stockops.data.transform import TransformData
+from stockops.data.utils import utcts_to_tzstr_parsed
 
 from .base_streaming_service import AbstractStreamingService
 
@@ -15,6 +20,17 @@ logger = logging.getLogger(__name__)
 class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
         pass
+
+    def make_db_filepath(self, exchange: str, year_str: str, month_str: str, day_str: str) -> Path:
+        filename = f"streaming_EODHD_{exchange}_{year_str}_{month_str}_{day_str}.db"
+
+        return config.RAW_STREAMING_DIR / filename
+
+    def write_data(self, table_name: str, exchange: str, transformed_row: dict):
+        yr_str, mo_str, day_str = utcts_to_tzstr_parsed(transformed_row["timestamp_UTC_ms"], self.tz)
+        db_path = self.make_db_filepath(exchange, yr_str, mo_str, day_str)
+
+        emit({"db_path": db_path, "table": table_name, "row": transformed_row})
 
     async def _stream_data(
         self,
@@ -52,10 +68,10 @@ class EODHDStreamingService(AbstractStreamingService):
                                 continue
                             else:
                                 table_name = data["s"]
-                                # !!! HERE IS WHERE THE DATA IS WRITTEN TO THE DB !!!
                                 logger.debug("[%s] Received data: %s", table_name, data)
                                 transformed_row = transform(data)
-                                print(transformed_row)
+
+                                self.write_data(table_name, exchange, transformed_row)
 
                         except json.JSONDecodeError:
                             safe_message = (
@@ -89,10 +105,13 @@ class EODHDStreamingService(AbstractStreamingService):
         stream_type = command["stream_type"]
 
         if stream_type == "trades":
-            url = f"wss://ws.eodhistoricaldata.com/ws/{exchange}?api_token={cfg.EODHD_API_TOKEN}"
+            url = f"wss://ws.eodhistoricaldata.com/ws/{exchange}?api_token={eodhd_config.EODHD_API_TOKEN}"
         elif stream_type == "quotes":
-            url = f"wss://ws.eodhistoricaldata.com/ws/{exchange}-quote?api_token={cfg.EODHD_API_TOKEN}"
+            url = f"wss://ws.eodhistoricaldata.com/ws/{exchange}-quote?api_token={eodhd_config.EODHD_API_TOKEN}"
         else:
             raise ValueError(f"Unknown stream type: {stream_type}")
+
+        tz_str = cast(str, eodhd_config.EXCHANGE_METADATA[exchange.upper()]["Timezone"])
+        self.tz = ZoneInfo(tz_str)
 
         asyncio.run(self._stream_data(url, stream_type, exchange.upper(), tickers, duration))
