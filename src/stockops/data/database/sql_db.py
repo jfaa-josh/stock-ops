@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, TypedDict
 
+import pandas as pd
+
 from stockops.config import utils as cfg_utils  # , add additional providers here as needed
 
 logger = logging.getLogger(__name__)
@@ -496,46 +498,133 @@ class SQLiteWriter:
 
 
 class SQLiteReader:
-    def __init__(self, db_path: Path):
-        self.db_path = db_path
-        self.conn = sqlite3.connect(db_path)
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.conn.execute("PRAGMA busy_timeout=5000;")  # avoid 'database is locked'
-        self.conn.execute("PRAGMA synchronous=NORMAL;")  # good perf, safe with WAL
-        self.conn.row_factory = sqlite3.Row
-        self.cursor = self.conn.cursor()
+    def __init__(self, ts_col: str, busy_timeout_ms: int = 5000):
+        self.ts_col = ts_col
+        self.busy_timeout_ms = busy_timeout_ms
 
-    def get_table_rowcount(self, table_name: str) -> int:
-        query = f'SELECT COUNT(*) FROM "{table_name}"'
-        self.cursor.execute(query)
-        row_count = self.cursor.fetchone()[0]
-        return row_count
+    def read_dt_range(
+        self, db_files: list[Path], table: str, interval: str | None, start: str | int, end: str | int
+    ) -> pd.DataFrame:
+        """
+        Return all 1m rows for table between [start, end] (inclusive) across the given files.
+        Skips missing/empty files gracefully. Returns a single DataFrame sorted by timestamp.
+        """
+        rows: list[pd.DataFrame] = []
 
-    def list_tables(self) -> list[str]:
-        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
-        return [row["name"] for row in self.cursor.fetchall()]
+        for db in db_files:
+            if not Path(db).exists():
+                continue
 
-    def fetch_all(self, table_name: str) -> list[dict[str, Any]]:
-        query = f'SELECT * FROM "{table_name}"'
-        self.cursor.execute(query)
-        return [dict(row) for row in self.cursor.fetchall()]
+            try:
+                with self._connect_ro(db) as conn:
+                    if not self._table_exists(conn, table):
+                        continue
 
-    def fetch_where(self, table_name: str, where_clause: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
-        query = f'SELECT * FROM "{table_name}" WHERE {where_clause}'
-        self.cursor.execute(query, params or [])
-        return [dict(row) for row in self.cursor.fetchall()]
+                    if not self._has_any_in_range(conn, table, interval, start, end):
+                        continue
 
-    def fetch_columns(self, table_name: str, columns: list[str], limit: int | None = None) -> list[dict[str, Any]]:
-        col_str = ", ".join(f'"{col}"' for col in columns)
-        query = f'SELECT {col_str} FROM "{table_name}"'
-        if limit is not None:
-            query += f" LIMIT {limit}"
-        self.cursor.execute(query)
-        return [dict(row) for row in self.cursor.fetchall()]
+                    df = self._query_range(conn, table, interval, start, end)
+                    if not df.empty:
+                        rows.append(df)
 
-    def fetch_metadata(self) -> list[dict[str, Any]]:
-        return self.fetch_all("stream_metadata")
+            except sqlite3.Error as e:
+                raise e
 
-    def execute_raw_query(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
-        self.cursor.execute(sql, params or [])
-        return [dict(row) for row in self.cursor.fetchall()]
+        if not rows:
+            return pd.DataFrame()
+
+        out = pd.concat(rows, ignore_index=True)
+
+        out = out.sort_values(self.ts_col)
+        out = out.reset_index(drop=True)
+        return out
+
+    # ---------- helpers ----------
+
+    def _connect_ro(self, db_path: Path) -> sqlite3.Connection:
+        """
+        Open read-only with WAL-friendly pragmas.
+        Using URI with mode=ro ensures we don’t interfere with the writer.
+        """
+        uri = f"file:{Path(db_path).as_posix()}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, isolation_level=None)  # autocommit-ish for reads
+        conn.row_factory = sqlite3.Row
+        # Pragmas that help co-exist with a writer using WAL
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms};")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        return conn
+
+    def _table_exists(self, conn: sqlite3.Connection, table: str) -> bool:
+        q = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;"
+        cur = conn.execute(q, (table,))
+        return cur.fetchone() is not None
+
+    def _has_any_in_range(
+        self, conn: sqlite3.Connection, table: str, interval: str | None, start: str | int, end: str | int
+    ) -> bool:
+        if interval and self._col_exists(conn, table, "interval"):
+            q = f'SELECT 1 FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ? AND interval=? LIMIT 1;'
+            cur = conn.execute(q, (start, end, interval))
+        else:
+            q = f'SELECT 1 FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ? LIMIT 1;'
+            cur = conn.execute(q, (start, end))
+        return cur.fetchone() is not None
+
+    def _query_range(
+        self, conn: sqlite3.Connection, table: str, interval: str | None, start: str | int, end: str | int
+    ) -> pd.DataFrame:
+        if interval and self._col_exists(conn, table, "interval"):
+            q = f'SELECT * FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ? AND interval=?;'
+            cur = conn.execute(q, (start, end, interval))
+        else:
+            q = f'SELECT * FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ?;'
+            cur = conn.execute(q, (start, end))
+        return pd.DataFrame([dict(row) for row in cur.fetchall()])
+
+    def _col_exists(self, conn: sqlite3.Connection, table: str, col: str) -> bool:
+        q = f'PRAGMA table_info("{table}");'
+        cols = {r["name"] for r in conn.execute(q)}
+        return col in cols
+
+    # def list_tables(self, db_path: Path) -> list[str]:
+    #     self._connect(db_path)
+    #     self._cursor.execute(
+    #         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+    #     )
+    #     return [row["name"] for row in self._cursor.fetchall()]
+
+    # def fetch_all(self, db_path: Path, table_name: str) -> list[dict[str, Any]]:
+    #     self._connect(db_path)
+    #     q = f'SELECT * FROM "{table_name}"'
+    #     self._cursor.execute(q)
+    #     return [dict(row) for row in self._cursor.fetchall()]
+
+    # def fetch_where(
+    #     self, db_path: Path, table_name: str, where_clause: str, params: Optional[list[Any]] = None
+    # ) -> list[dict[str, Any]]:
+    #     self._connect(db_path)
+    #     q = f'SELECT * FROM "{table_name}" WHERE {where_clause}'
+    #     self._cursor.execute(q, params or [])
+    #     return [dict(row) for row in self._cursor.fetchall()]
+
+    # def fetch_columns(
+    #     self, db_path: Path, table_name: str, columns: list[str], limit: Optional[int] = None
+    # ) -> list[dict[str, Any]]:
+    #     self._connect(db_path)
+    #     col_str = ", ".join(f'"{c}"' for c in columns)
+    #     q = f"SELECT {col_str} FROM \"{table_name}\""
+    #     if limit:
+    #         q += f" LIMIT {limit}"
+    #     self._cursor.execute(q)
+    #     return [dict(row) for row in self._cursor.fetchall()]
+
+    # def fetch_metadata(self, db_path: Path) -> list[dict[str, Any]]:
+    #     return self.fetch_all(db_path, "stream_metadata")
+
+    # def execute_raw_query(
+    #     self, db_path: Path, sql: str, params: Optional[list[Any]] = None
+    # ) -> list[dict[str, Any]]:
+    #     self._connect(db_path)
+    #     self._cursor.execute(sql, params or [])
+    #     return [dict(row) for row in self._cursor.fetchall()]

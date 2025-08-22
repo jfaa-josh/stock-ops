@@ -23,8 +23,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-GROUP = os.getenv("BUFFER_GROUP", "buf-workers")
-CONSUMER_ID = os.getenv("BUFFER_CONSUMER", "writer-1")
+GROUP: str = os.getenv("BUFFER_GROUP", "buf-workers")
+CONSUMER_ID: str = os.getenv("BUFFER_CONSUMER", "writer-1")
 
 # batching/loop knobs
 COUNT = int(os.getenv("BUFFER_BATCH", "500"))  # max number of messages to read from the Redis stream in one batch
@@ -36,8 +36,8 @@ TRIM_MAXLEN = int(
 )  # cap the stream length so it doesn’t grow forever (approximate bound)
 
 RECOVER_EVERY_SEC = config.RECOVER_EVERY_SEC
-CLAIM_MIN_IDLE_MS = config.CLAIM_MIN_IDLE_MS
-TRIM_EVERY_SEC = config.CLAIM_MIN_IDLE_MS
+CLAIM_MIN_IDLE_SEC = config.CLAIM_MIN_IDLE_SEC
+TRIM_EVERY_SEC = config.TRIM_EVERY_SEC
 
 stop_event = None  # module global
 
@@ -95,7 +95,7 @@ def _install_signal_handlers() -> None:
 
 
 def _recover_pending(
-    stream, writer: SQLiteWriter, group: str, consumer: str, count: int = 100, min_idle_ms: int = CLAIM_MIN_IDLE_MS
+    stream, writer: SQLiteWriter, group: str, consumer: str, count: int = 100, min_idle_ms: int = CLAIM_MIN_IDLE_SEC
 ) -> None:
     """
     Use XAUTOCLAIM to grab stale pending messages and handle them as a normal batch.
@@ -103,9 +103,21 @@ def _recover_pending(
     try:
         start = "0-0"  # start is '0-0' initially; then use returned 'next_start' to continue
         while True:
-            claimed, next_start = stream.r.xautoclaim(stream.stream, group, consumer, min_idle_ms, start, count=count)[
-                1:
-            ]  # redis-py returns (claimed_msgs, next_start) or (key, [(id, fields), ...], next_start)
+            resp = stream.r.xautoclaim(stream.stream, group, consumer, int(min_idle_ms), str(start), count=int(count))
+            claimed = []
+            next_start = None
+            if isinstance(resp, list | tuple):
+                if len(resp) == 2:
+                    next_start, claimed = resp  # redis-py >= 4/5 common shape: (next_start, messages)
+                elif len(resp) == 3:
+                    _, claimed, next_start = resp  # legacy/multi-key shape: (key, messages, next_start)
+                else:
+                    logger.error("Unexpected XAUTOCLAIM response shape: %r", resp)
+                    break
+            else:
+                logger.error("Unexpected XAUTOCLAIM response type: %r", type(resp))
+                break
+
             if not claimed:
                 break
 
@@ -118,9 +130,11 @@ def _recover_pending(
             if ok_ids:
                 stream.ack(group, ok_ids)
                 stream.delete(ok_ids)
-            start = next_start
-            if start is None or start == "0-0":
+
+            if not next_start or next_start == "0-0":
                 break
+
+            start = str(next_start)
     except Exception:
         logger.exception("Error during pending recovery with XAUTOCLAIM")
 

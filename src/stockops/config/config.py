@@ -26,5 +26,5 @@ RAW_HISTORICAL_DIR = DATA_DIR / "raw" / "historical"
 
 ## Writer message buffer
 RECOVER_EVERY_SEC = 240  # how often (in seconds) to run the "recover stale/pending messages" routine
-CLAIM_MIN_IDLE_MS = 5_000  # only "claim" (take over) pending messages that have been idle for at least 5 seconds
+CLAIM_MIN_IDLE_SEC = 5_000  # only "claim" (take over) pending messages that have been idle for at least 5 seconds
 TRIM_EVERY_SEC = 3_600.0  # how often (in seconds) to attempt stream trimming when idle
