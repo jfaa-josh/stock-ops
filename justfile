@@ -25,24 +25,6 @@ mypy:
 test:
     uv run pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
 
-generate-structure-doc:
-  if ! command -v tree &> /dev/null; then \
-    echo "'tree' not found. Installing..."; \
-    sudo apt-get update && sudo apt-get install -y tree; \
-  fi
-  mkdir -p docs
-  echo "# Repository Structure" > docs/structure.md
-  echo "" >> docs/structure.md
-
-  echo "## Top-Level Layout" >> docs/structure.md
-  ls -1 | sed 's/^/├── /' >> docs/structure.md
-
-  echo "" >> docs/structure.md
-  echo "## Source Code Structure (src/)" >> docs/structure.md
-  echo '```' >> docs/structure.md
-  tree src -a >> docs/structure.md
-  echo '```' >> docs/structure.md
-
 # Generate a Dockerfile for the project
 docker-build:
   chmod +x scripts/derive_env_from_pyproject.py

@@ -28,8 +28,8 @@ class SQLiteWriter:
         self._conn: sqlite3.Connection | None = None
         self._cursor: sqlite3.Cursor | None = None
         self._open_for: tuple[Path, str] | None = None
-        # cache by (db, table)
         self._table_meta: dict[tuple[Path, str], dict[str, Any]] = {}
+        self._open_db: Path | None = None
 
     def update_min_max(self, val, mn, mx):
         """Update min/max with a single comparison each (no branching)."""
@@ -122,32 +122,44 @@ class SQLiteWriter:
         new_cols_defs = ", ".join(coldef(c) for c in existing_cols)
         tmp_name = f"__tmp_{table_name}"
 
-        conn.execute("BEGIN IMMEDIATE")
         try:
-            # 1) Create tmp table with upgraded DDL
-            cur.execute(f'CREATE TABLE "{tmp_name}" ({new_cols_defs})')
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                # 1) Create tmp table with upgraded DDL
+                cur.execute(f'CREATE TABLE "{tmp_name}" ({new_cols_defs})')
 
-            # 2) Copy data
-            col_list_sql = ", ".join(f'"{c}"' for c in existing_cols)
-            cur.execute(f'INSERT INTO "{tmp_name}" ({col_list_sql}) SELECT {col_list_sql} FROM "{table_name}"')
+                # 2) Copy data
+                col_list_sql = ", ".join(f'"{c}"' for c in existing_cols)
+                cur.execute(f'INSERT INTO "{tmp_name}" ({col_list_sql}) SELECT {col_list_sql} FROM "{table_name}"')
 
-            # 3) Drop old and rename tmp
-            cur.execute(f'DROP TABLE "{table_name}"')
-            cur.execute(f'ALTER TABLE "{tmp_name}" RENAME TO "{table_name}"')
+                # 3) Drop old and rename tmp
+                cur.execute(f'DROP TABLE "{table_name}"')
+                cur.execute(f'ALTER TABLE "{tmp_name}" RENAME TO "{table_name}"')
 
-            # 4) Recreate indexes
-            cur.execute(
-                f'CREATE INDEX IF NOT EXISTS "ix_{table_name}_" ON "{table_name}" '
-                f"({', '.join(f'"{c}"' for c in idx_cols)})"
-            )
-            cur.execute(
-                f'CREATE UNIQUE INDEX IF NOT EXISTS "ux_{table_name}_ver" '
-                f'ON "{table_name}" ({", ".join(f'"{c}"' for c in idx_cols)},"version")'
-            )
+                # 4) Recreate indexes
+                cur.execute(
+                    f'CREATE INDEX IF NOT EXISTS "ix_{table_name}_" ON "{table_name}" '
+                    f"({', '.join(f'"{c}"' for c in idx_cols)})"
+                )
+                cur.execute(
+                    f'CREATE UNIQUE INDEX IF NOT EXISTS "ux_{table_name}_ver" '
+                    f'ON "{table_name}" ({", ".join(f'"{c}"' for c in idx_cols)},"version")'
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
-            conn.commit()
-        except Exception:
-            conn.rollback()
+        except sqlite3.OperationalError as e:
+            # If locked (viewer/reader present), skip migration now to avoid stalls.
+            msg = str(e).lower()
+            if "locked" in msg or "busy" in msg:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logger.debug("Skipping schema migration for %s (db is busy). Will retry later.", table_name)
+                return False
             raise
 
         # refresh cache
@@ -164,7 +176,6 @@ class SQLiteWriter:
         self,
         cur: sqlite3.Cursor,
         table_name: str,
-        mode: str,
         idx_cols: list[str],
         provider: str,
         exchange: str,
@@ -200,9 +211,9 @@ class SQLiteWriter:
             try:
                 # mimic old code: get metadata from cfg_utils
                 meta = cfg_utils.ProviderConfig(provider, exchange).cfg.EXCHANGE_METADATA[exchange]
-            except Exception as e:
+            except Exception:
                 logger.warning("Skipping provider metadata seeding; parse/lookup failed.", exc_info=True)
-                raise e
+                meta = {}
 
             rows = [(str(k), json.dumps(v) if isinstance(v, dict) else str(v)) for k, v in meta.items()]
             rows.extend(
@@ -241,45 +252,44 @@ class SQLiteWriter:
     ) -> None:
         """Open DB; create/verify meta, stats, and the table with the requested mode."""
         target = (db_filepath, table_name)
-        need_open = (self._open_for != target) or (self._conn is None) or (self._cursor is None)
+        need_open = (self._open_db != db_filepath) or (self._conn is None) or (self._cursor is None)
         if need_open:
-            # open
+            logger.info("Opening DB %s; table=%s; mode=%s; idx_cols=%s", db_filepath, table_name, mode, idx_cols)
+
             self.close()
             db_filepath.parent.mkdir(parents=True, exist_ok=True)
-            uri = f"file:{str(db_filepath)}?mode=rwc"  # read-write, create if needed
+            uri = f"file:{str(db_filepath)}?mode=rwc"
             conn = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA busy_timeout=5000;")
-            cur = conn.execute("PRAGMA journal_mode;")
-            mode = cur.fetchone()[0].upper()
-            if mode != "WAL":
-                # This requires the directory to be writable
+            jcur = conn.execute("PRAGMA journal_mode;")
+            journal_mode = jcur.fetchone()[0].upper()
+            if journal_mode != "WAL":
                 conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("PRAGMA wal_autocheckpoint=1000;")
             conn.execute("PRAGMA synchronous=NORMAL;")
             cur = conn.cursor()
-            self._conn, self._cursor, self._open_for = conn, cur, target
+            self._conn, self._cursor, self._open_db = conn, cur, db_filepath
 
             # Create/verify meta + stats + table
-            self._verify_or_create_tables(cur, table_name, mode, idx_cols, provider, exchange, True)
+            cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1;")
+            db_just_opened = cur.fetchone() is None
+            self._verify_or_create_tables(cur, table_name, idx_cols, provider, exchange, db_just_opened)
             conn.commit()
         if self._cursor is None:
             raise RuntimeError("Failed to initialize cursor")
 
-        # if table already exists: verify compatible
+        # Verify table shape & cache
         cur = self._cursor
         cur.execute(f'PRAGMA table_info("{table_name}")')
         existing_cols = {row["name"] for row in cur.fetchall()}
-
         required = set(idx_cols) | {"version"}
-        # mode compatibility: required index columns must exist exclusively as per mode
         if not required.issubset(existing_cols):
             raise RuntimeError(
-                f'Table "{table_name}" does not match requested mode {mode}; '
+                f'Table "{table_name}" does not match requested index-mode {mode}; '
                 f"missing required columns {sorted(required - existing_cols)}."
             )
-
-        # cache table columns
+        self._open_for = target
         self._table_meta[target] = {"mode": mode, "cols": existing_cols}
 
     def _evolve_columns(self, cur: sqlite3.Cursor, table_name: str, needed_cols: set[str]) -> None:
@@ -384,6 +394,19 @@ class SQLiteWriter:
                 self.target_affinity[c] = self.infer_sqlite_affinity(v)
         payload_cols = affinity_cols - (set(idx_cols) | {"version"})  # All non None
 
+        # Skip and ack if all payload values are None, or contain only index cols
+        ok_ids: list[str] = []
+        if not payload_cols or all(first_non_null.get(c) is None for c in payload_cols):
+            ok_ids = [mid for mid, _ in batch]
+            logger.debug(
+                "Index-only batch for %s/%s (mode=%s); acking %d message(s) without DB I/O",
+                db_filepath,
+                table_name,
+                mode,
+                len(ok_ids),
+            )
+            return ok_ids
+
         # Open / verify schema for this mode
         self._ensure_open(db_filepath, table_name, mode, idx_cols, provider, exchange)
         if self._cursor is None or self._conn is None:
@@ -412,8 +435,6 @@ class SQLiteWriter:
             f'INSERT INTO "{table_name}" ({", ".join(f"""\"{c}\"""" for c in insert_cols)}) VALUES ({placeholders});'
         )
 
-        ok_ids: list[str] = []
-
         # Stats accumulation
         batch_min_ts = None  # seconds
         batch_max_ts = None
@@ -435,12 +456,16 @@ class SQLiteWriter:
                     ok_ids.append(msg_id)
                     continue
 
-                # Build index values (must be present)
+                # Build & validate index values (must be present and not None)
+                for c in idx_cols:
+                    if c not in payload or payload[c] is None:
+                        raise ValueError(f"Missing required index column '{c}' (mode={mode})")
                 idx_vals = tuple(payload[c] for c in idx_cols)
 
                 # 1) Subset by index
                 cur.execute(select_subset_sql, idx_vals)
                 subset_rows = cur.fetchall()
+                logger.debug("subset_rows=%d for idx=%s", len(subset_rows), idx_vals)
 
                 # Keys to compare for exactness
                 cmp_keys = [k for k in payload.keys() if k not in {"msg_id", "version"}]
@@ -465,6 +490,7 @@ class SQLiteWriter:
 
                 if is_exact_dup:
                     ok_ids.append(msg_id)
+                    logger.debug("Exact duplicate detected; ack only. idx=%s", idx_vals)
                     continue
 
                 # 3) versioning
@@ -475,7 +501,17 @@ class SQLiteWriter:
                 row_vals.extend(payload.get(c) for c in idx_cols)  # index
                 row_vals.extend(payload.get(c) for c in non_index_payload_cols)  # data
                 row_vals.append(int(new_version))  # version
-                cur.execute(insert_sql, row_vals)
+                if new_version > 1:
+                    logger.debug("Insert with version=%d idx=%s", new_version, idx_vals)
+
+                try:
+                    cur.execute(insert_sql, row_vals)
+                except Exception:
+                    logger.exception(
+                        "Row insert failed for %s/%s idx=%s; skipping row", db_filepath, table_name, idx_vals
+                    )
+                    ok_ids.append(msg_id)
+                    continue
                 ok_ids.append(msg_id)
 
                 # Update tally for row interval stats
@@ -506,7 +542,8 @@ class SQLiteWriter:
                     batch_min_date, batch_max_date = self.update_min_max(d, batch_min_date, batch_max_date)
 
             conn.commit()
-        except Exception:
+        except Exception as e:
+            logger.exception("There was an exception on the batch.  Nothing was written -> rollback: %s", e)
             conn.rollback()
             raise
 
@@ -635,31 +672,6 @@ class SQLiteWriter:
                 try:
                     self._conn.commit()
                 except Exception:
-                    pass
-
-                # Try a bounded retry on TRUNCATE checkpoint
-                busy = 1
-                for _ in range(3):
-                    try:
-                        row = self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE);").fetchone()
-                        busy = 0 if not row else int(row[0])
-                    except Exception:
-                        busy = 0
-                    if busy == 0:
-                        break
-
-                # If still busy, do a passive checkpoint to merge what we can
-                if busy:
-                    try:
-                        self._conn.execute("PRAGMA wal_checkpoint(PASSIVE);")
-                    except Exception:
-                        pass
-
-                # Try to switch to DELETE so -wal/-shm are removed when nobody else is attached
-                try:
-                    self._conn.execute("PRAGMA journal_mode=DELETE;")
-                except Exception:
-                    # If other readers remain, this can fail; not fatal.
                     pass
         finally:
             # Close cursor/connection unconditionally

@@ -2,6 +2,7 @@ import requests
 import logging
 from functools import lru_cache
 from typing import Dict, Any, List, Union
+import os
 
 import api_client
 
@@ -14,8 +15,8 @@ class APIBackend:
         self.api_version = self.get_api_version()
         self.api_client = api_client.ApiClient(base_url = self.api_url,
                                                default_headers = self.build_headers(),)
+        self.verbose_logging = os.getenv("VERBOSE_LOGGING", "false").lower() == "true"
         self.flow_id = self.register_controller_flow(flow_name)
-
 
     @lru_cache(maxsize=1) # This just caches the result of this function so it doesn't call the API every time
     def get_api_version(self) -> str:
@@ -49,7 +50,7 @@ class APIBackend:
             path = f"/deployments/{deployment_id}"
             logger.info(f"Checking deployment status...")
             response = self.api_client.send(path, method = "GET")
-            logger.debug("Response: %s", response)
+            if self.verbose_logging: logger.debug("Response: %s", response)
             return response
         except requests.exceptions.RequestException as e:
             logger.error("HTTP request failed: %s", str(e), exc_info=True)
@@ -60,7 +61,7 @@ class APIBackend:
         logger.info("Creating deployment schedules...")
         response = self.api_client.send(path, payload=payload, method="POST")
         logger.debug("Payload: %s", payload)
-        logger.debug("Response: %s", response)
+        if self.verbose_logging: logger.debug("Response: %s", response)
         return response
 
     def check_flow_run_status(self, flow_run_id: str):
@@ -68,7 +69,7 @@ class APIBackend:
             path = f"/flow_runs/{flow_run_id}"
             logger.info(f"Checking status for flow run {flow_run_id}...")
             response = self.api_client.send(path, method = "GET")
-            logger.debug("Response: %s", response)
+            if self.verbose_logging: logger.debug("Response: %s", response)
             return response
         except requests.exceptions.RequestException as e:
             logger.error("HTTP request failed: %s", str(e), exc_info=True)
@@ -81,7 +82,7 @@ class APIBackend:
             logger.info(f"Registering flow {flow_name}")
             response = self.api_client.send(path, payload = payload, method = "POST")
             logger.debug("Payload: %s", payload)
-            logger.debug("Response: %s", response)
+            if self.verbose_logging: logger.debug("Response: %s", response)
             return response['id']
         except requests.exceptions.RequestException as e:
             logger.error("HTTP request failed: %s", str(e), exc_info=True)
@@ -102,7 +103,7 @@ class APIBackend:
             response = self.api_client.send(path, payload = payload,
                                             method = "POST")
             logger.debug("Payload: %s", payload)
-            logger.debug("Response: %s", response)
+            if self.verbose_logging: logger.debug("Response: %s", response)
             return response
         except requests.exceptions.RequestException as e:
             logger.error("HTTP request failed: %s", str(e), exc_info=True)
@@ -123,7 +124,7 @@ class APIBackend:
             response = self.api_client.send(path, payload = payload,
                                             method = "POST")
             logger.debug("Payload: %s", payload)
-            logger.debug("Response: %s", response)
+            if self.verbose_logging: logger.debug("Response: %s", response)
             return response
         except requests.exceptions.RequestException as e:
             logger.error("HTTP request failed: %s", str(e), exc_info=True)

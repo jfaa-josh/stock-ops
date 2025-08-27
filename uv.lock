@@ -1747,7 +1747,6 @@ name = "stocks-ops"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "prefect" },
@@ -1761,12 +1760,15 @@ ui = [
     { name = "streamlit-autorefresh" },
 ]
 writer = [
+    { name = "matplotlib" },
+    { name = "numpy" },
     { name = "redis" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "fakeredis" },
+    { name = "matplotlib" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -1782,8 +1784,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "matplotlib" },
+    { name = "matplotlib", marker = "extra == 'writer'" },
     { name = "numpy" },
+    { name = "numpy", marker = "extra == 'writer'" },
     { name = "pandas" },
     { name = "prefect", specifier = "==3.4.10" },
     { name = "redis", marker = "extra == 'writer'" },
@@ -1797,6 +1800,7 @@ provides-extras = ["ui", "writer"]
 [package.metadata.requires-dev]
 dev = [
     { name = "fakeredis" },
+    { name = "matplotlib" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },

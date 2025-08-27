@@ -16,13 +16,22 @@ def get_data_path(default_local):  # Switch for docker vs local
     return Path(os.environ.get("DB_DATA_DIR", default_local))
 
 
+def get_writedata_path(data_dir):  # Switch for docker vs local
+    if "DB_DATA_DIR" in os.environ:
+        return data_dir / "raw"
+    else:
+        return data_dir / "git_lfs" / "test_data"
+
+
 DATA_DIR = get_data_path(ROOT_DIR / "data")
 
+DATA_RAW_DIR = get_writedata_path(DATA_DIR)
+
 ### Streaming
-RAW_STREAMING_DIR = DATA_DIR / "raw" / "streaming"
+RAW_STREAMING_DIR = DATA_RAW_DIR / "streaming"
 
 ### Historical
-RAW_HISTORICAL_DIR = DATA_DIR / "raw" / "historical"
+RAW_HISTORICAL_DIR = DATA_RAW_DIR / "historical"
 
 ## Writer message buffer
 RECOVER_EVERY_SEC = 240  # how often (in seconds) to run the "recover stale/pending messages" routine

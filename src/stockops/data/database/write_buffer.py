@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any, Protocol, cast, runtime_checkable
 
 logger = logging.getLogger(__name__)
@@ -42,17 +43,45 @@ class RedisStream(_BaseStream):
                 raise
 
     def read_group(self, group: str, consumer: str, count: int, block_ms: int) -> list[tuple[str, dict[str, Any]]]:
-        resp = cast(
-            list[tuple[str, list[tuple[str, dict[str, Any]]]]],
-            self.r.xreadgroup(group, consumer, {self.stream: ">"}, count=count, block=block_ms),
-        )
-        if not resp:
-            return []
-        _, entries = resp[0]
-        out = []
-        for msg_id, kv in entries:
-            s = kv["json"]  # str key, str value
-            out.append((msg_id, json.loads(s)))
+        """
+        Try to accumulate up to `count` messages without exceeding `block_ms` total wall time.
+        Returns as soon as we hit `count` OR the deadline passes.
+        """
+        deadline = time.monotonic() + (block_ms / 1000.0)
+        out: list[tuple[str, dict[str, Any]]] = []
+        first = True
+        TOPUP_MS = 25  # small coalescing window per top-up read
+
+        while len(out) < count:
+            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+            if remaining_ms == 0 and not first:
+                break
+
+            per_call_block = remaining_ms if first else min(remaining_ms, TOPUP_MS)
+            want = count - len(out)
+
+            resp = cast(
+                list[tuple[str, list[tuple[str, dict[str, Any]]]]],
+                self.r.xreadgroup(
+                    groupname=group,
+                    consumername=consumer,
+                    streams={self.stream: ">"},
+                    count=want,
+                    block=per_call_block if per_call_block > 0 else 0,
+                ),
+            )
+            if not resp:
+                # nothing arrived during this (top-up) window; loop until deadline
+                first = False
+                continue
+
+            _, entries = resp[0]
+            for msg_id, kv in entries:
+                s = kv["json"]
+                out.append((msg_id, json.loads(s)))
+
+            first = False
+
         return out
 
     def ack(self, group: str, ids: list[str]) -> int:
@@ -92,17 +121,45 @@ class FakeRedisStream(_BaseStream):
                 raise
 
     def read_group(self, group: str, consumer: str, count: int, block_ms: int) -> list[tuple[str, dict[str, Any]]]:
-        resp = cast(
-            list[tuple[str, list[tuple[str, dict[str, Any]]]]],
-            self.r.xreadgroup(group, consumer, {self.stream: ">"}, count=count, block=block_ms),
-        )
-        if not resp:
-            return []
-        _, entries = resp[0]
-        out = []
-        for msg_id, kv in entries:
-            s = kv["json"]  # str key, str value
-            out.append((msg_id, json.loads(s)))
+        """
+        Try to accumulate up to `count` messages without exceeding `block_ms` total wall time.
+        Returns as soon as we hit `count` OR the deadline passes.
+        """
+        deadline = time.monotonic() + (block_ms / 1000.0)
+        out: list[tuple[str, dict[str, Any]]] = []
+        first = True
+        TOPUP_MS = 25  # small coalescing window per top-up read
+
+        while len(out) < count:
+            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+            if remaining_ms == 0 and not first:
+                break
+
+            per_call_block = remaining_ms if first else min(remaining_ms, TOPUP_MS)
+            want = count - len(out)
+
+            resp = cast(
+                list[tuple[str, list[tuple[str, dict[str, Any]]]]],
+                self.r.xreadgroup(
+                    groupname=group,
+                    consumername=consumer,
+                    streams={self.stream: ">"},
+                    count=want,
+                    block=per_call_block if per_call_block > 0 else 0,
+                ),
+            )
+            if not resp:
+                # nothing arrived during this (top-up) window; loop until deadline
+                first = False
+                continue
+
+            _, entries = resp[0]
+            for msg_id, kv in entries:
+                s = kv["json"]
+                out.append((msg_id, json.loads(s)))
+
+            first = False
+
         return out
 
     def ack(self, group: str, ids: list[str]) -> int:

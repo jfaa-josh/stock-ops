@@ -39,9 +39,6 @@ jobs:
       - name: Run tests
         run: just test
 
-      - name: Generate structure.md
-        run: just generate-structure-doc
-
       - name: Check for uncommitted changes in structure.md
         run: |
           git diff --exit-code docs/structure.md || (

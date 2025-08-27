@@ -9,7 +9,6 @@ authors = [
 requires-python = "~=3.13"
 dependencies = [
     "numpy",
-    "matplotlib",
     "pandas",
     "websockets",
     "prefect==3.4.10",
@@ -24,6 +23,8 @@ ui = [
 ]
 writer = [
   "redis",
+  "numpy",
+  "matplotlib",
 ]
 
 [dependency-groups]
@@ -42,6 +43,7 @@ dev = [
     "streamlit",
     "requests",
     "streamlit-autorefresh",
+    "matplotlib",
 ]
 
 [tool.ruff]
