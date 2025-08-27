@@ -1,32 +1,124 @@
-import calendar
 import math
-from collections.abc import Iterator
-from datetime import UTC, date, datetime, timedelta
-from typing import Literal
+from datetime import UTC, date, datetime
+from typing import TypedDict, cast
 from zoneinfo import ZoneInfo
 
+from stockops.data.database.utils import period_from_unix
+
 _MONTHS = ("0", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
-Precision = Literal["yr", "mo", "day"]
-MON2NUM = {m: i for i, m in enumerate(_MONTHS) if i > 0}
-NUM2MON = {i: m for i, m in enumerate(_MONTHS) if i > 0}
+
+
+class DBFilenameParts(TypedDict):
+    data_type: str
+    provider: str
+    exchange: str
+    year: str | None
+    month: str | None
+    day: str | None
+
+
+def parse_db_filename(filename: str) -> DBFilenameParts:
+    if not filename.endswith(".db"):
+        raise ValueError(f"Not a valid DB filename: {filename}")
+    parts = filename[:-3].split("_")
+
+    if parts[0] == "historical":
+        data_type = "_".join(parts[:2])
+        parts = parts[2:]
+    else:
+        data_type = parts[0]
+        parts = parts[1:]
+
+    provider, exchange, *rest = parts
+    year = rest[0] if len(rest) >= 1 else None
+    month = rest[1] if len(rest) >= 2 else None
+    day = rest[2] if len(rest) >= 3 else None
+
+    return {
+        "data_type": data_type,
+        "provider": provider,
+        "exchange": exchange,
+        "year": year,
+        "month": month,
+        "day": day,
+    }
+
+
+def get_standard_db_filename(
+    data_type: str, provider: str, exchange: str, y: str | None = None, m: str | None = None, d: str | None = None
+) -> str:
+    if data_type == "historical_interday":
+        return f"{data_type}_{provider}_{exchange}.db"
+
+    elif data_type == "historical_intraday" and all([y, m]):
+        return f"{data_type}_{provider}_{exchange}_{y}_{m}.db"
+
+    elif data_type == "streaming" and all([y, m, d]):
+        return f"{data_type}_{provider}_{exchange}_{y}_{m}_{d}.db"
+
+    raise ValueError(f"Unsupported data_type: {data_type!r}")
+
+
+def get_db_filename_for_date(
+    data_type: str, tz: ZoneInfo, provider: str, exchange: str, entry_datetime: int | None
+) -> str:
+    if data_type == "historical_interday":
+        return get_standard_db_filename(data_type, provider, exchange)
+
+    elif data_type == "historical_intraday" and entry_datetime is not None:
+        y, m, d = utcts_to_tzstr_parsed(entry_datetime, tz)
+        return get_standard_db_filename(data_type, provider, exchange, y, m)
+
+    elif data_type == "streaming" and entry_datetime is not None:
+        y, m, d = utcts_to_tzstr_parsed(entry_datetime, tz)
+        return get_standard_db_filename(data_type, provider, exchange, y, m, d)
+
+    raise ValueError(f"Unsupported data_type: {data_type!r}")
+
+
+def get_filenames_for_dates(
+    data_type: str, tz: ZoneInfo, provider: str, exchange: str, daterange_endpts: tuple[str | int, str | int]
+) -> list[str]:
+    if data_type == "historical_interday":
+        return [get_standard_db_filename(data_type, provider, exchange)]
+
+    elif data_type == "historical_intraday":
+        start, end = cast(tuple[int, int], daterange_endpts)
+        start_tup = utcts_to_tzstr_parsed(start, tz)
+        end_tup = utcts_to_tzstr_parsed(end, tz)
+        filename_dates = period_from_unix(start_tup, end_tup, precision="mo")
+        return [get_standard_db_filename(data_type, provider, exchange, y, m) for (y, m) in filename_dates]
+
+    elif data_type == "streaming":
+        start, end = cast(tuple[int, int], daterange_endpts)
+        start_tup = utcts_to_tzstr_parsed(start, tz)
+        end_tup = utcts_to_tzstr_parsed(end, tz)
+        filename_dates = period_from_unix(start_tup, end_tup, precision="day")
+        return [get_standard_db_filename(data_type, provider, exchange, y, m, d) for (y, m, d) in filename_dates]
+
+    raise ValueError(f"Unsupported data_type: {data_type!r}")
 
 
 def normalize_ts_to_seconds(value: int | float) -> float:
     """
-    Normalize Unix time to *seconds* (float). Accepts s, ms, or µs based on magnitude.
-    ~1.7e9 s (2025), ~1.7e12 ms, ~1.7e15 µs. Uses loose thresholds.
+    Normalize Unix time to seconds (float).
+    Detects seconds, milliseconds, or microseconds based on magnitude.
+    - ~1e9  (seconds since epoch today)
+    - ~1e12 (milliseconds)
+    - ~1e15 (microseconds)
     """
-    if not isinstance(value, int | float) or not math.isfinite(value):
+    if not isinstance(value, (int | float)) or not math.isfinite(value):
         raise TypeError(f"Unsupported or non-finite type/value: {value!r}")
 
     v = float(value)
     av = abs(v)
-    # Heuristics: >=1e14 -> µs, >=1e11 -> ms, else seconds
-    if av >= 1e14:
-        return v / 1_000_000.0  # microseconds -> seconds
-    if av >= 1e11:
-        return v / 1_000.0  # milliseconds -> seconds
-    return v  # seconds
+
+    if av >= 1e14:  # µs
+        return v / 1_000_000.0
+    elif av >= 1e11:  # ms
+        return v / 1_000.0
+    else:  # s
+        return v
 
 
 def utcts_to_tzstr_parsed(value: int | float, tz: ZoneInfo) -> tuple[str, str, str] | tuple[str, str, str]:
@@ -49,7 +141,8 @@ def tzstr_to_utcts(dt_str: str, format: str, tz: ZoneInfo) -> int:
 
 
 def utcts_to_tzstr(ts: int | float, format: str, tz: ZoneInfo) -> str:
-    return datetime.fromtimestamp(ts, tz=tz).strftime(format)
+    n_ts = normalize_ts_to_seconds(int(ts))
+    return datetime.fromtimestamp(n_ts, tz=tz).strftime(format)
 
 
 def validate_isodatestr(s: str) -> str:
@@ -76,98 +169,3 @@ def validate_utc_ts(ts: int, precision: str) -> int:
     else:
         raise ValueError(f"Unsupported precision {precision!r}, expected 's' or 'ms'")
     return ts
-
-
-def _parse_tuple(t: tuple[str, ...], precision: Precision) -> tuple[int, int, int]:
-    """Return (Y,M,D) with sensible defaults based on precision."""
-    if precision == "yr":
-        if len(t) != 1:
-            raise ValueError("yr precision expects ('YYYY',)")
-        y = int(t[0])
-        return (y, 1, 1)
-
-    if precision == "mo":
-        if len(t) != 2:
-            raise ValueError("mo precision expects ('YYYY','MON')")
-        y, mon = int(t[0]), t[1].upper()
-        if mon not in MON2NUM:
-            raise ValueError(f"Unknown month token: {mon}")
-        return (y, MON2NUM[mon], 1)
-
-    # precision == "day"
-    if len(t) != 3:
-        raise ValueError("day precision expects ('YYYY','MON','DD')")
-    y, mon, d = int(t[0]), t[1].upper(), int(t[2])
-    if mon not in MON2NUM:
-        raise ValueError(f"Unknown month token: {mon}")
-    return (y, MON2NUM[mon], d)
-
-
-def _end_cap(y: int, m: int, precision: Precision) -> tuple[int, int, int]:
-    """Expand the end bound to the end of the unit for inclusivity (yr/mo only)."""
-    if precision == "yr":
-        return (y, 12, 31)
-    if precision == "mo":
-        return (y, m, calendar.monthrange(y, m)[1])
-    # Not used for "day" in current flow.
-    return (y, m, 0)
-
-
-def date_tuple_range(
-    start_t: tuple[str, ...], end_t: tuple[str, ...], precision: Precision
-) -> Iterator[tuple[str, ...]]:
-    """
-    Inclusive generator at the chosen precision.
-    Returns ('YYYY',) | ('YYYY','MON') | ('YYYY','MON','DD').
-    """
-    ys, ms, ds = _parse_tuple(start_t, precision)
-    ye, me, de = _parse_tuple(end_t, precision)
-
-    # Build concrete inclusive date bounds
-    start_date = date(ys, ms, ds)
-    if precision == "day":
-        end_date = date(ye, me, de)
-    else:
-        ye2, me2, de2 = _end_cap(ye, me, precision)
-        end_date = date(ye2, me2, de2)
-
-    if start_date > end_date:
-        start_date, end_date = end_date, start_date  # swap
-
-    if precision == "yr":
-        for y in range(start_date.year, end_date.year + 1):
-            yield (str(y),)
-
-    elif precision == "mo":
-        y, m = start_date.year, start_date.month
-        while (y < end_date.year) or (y == end_date.year and m <= end_date.month):
-            yield (str(y), NUM2MON[m])
-            m += 1
-            if m > 12:
-                m = 1
-                y += 1
-
-    else:  # "day"
-        cur = start_date
-        step = timedelta(days=1)
-        while cur <= end_date:
-            yield (str(cur.year), NUM2MON[cur.month], f"{cur.day:02d}")
-            cur += step
-
-
-def period_from_unix(
-    start_utcts: int | float, end_utcts: int | float, tz, precision: Precision
-) -> list[tuple[str, ...]]:
-    s_yr, s_mon, s_day = utcts_to_tzstr_parsed(start_utcts, tz)
-    e_yr, e_mon, e_day = utcts_to_tzstr_parsed(end_utcts, tz)
-
-    s_t: tuple[str, ...]
-    e_t: tuple[str, ...]
-    if precision == "yr":
-        s_t, e_t = (s_yr,), (e_yr,)
-    elif precision == "mo":
-        s_t, e_t = (s_yr, s_mon), (e_yr, e_mon)
-    else:
-        s_t, e_t = (s_yr, s_mon, s_day), (e_yr, e_mon, e_day)
-
-    return list(date_tuple_range(s_t, e_t, precision=precision))

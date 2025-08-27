@@ -24,11 +24,11 @@ class RedisStream(_BaseStream):
     REDIS_URL like: redis://redis:6379/1
     """
 
-    def __init__(self, stream: str, redis_url: str | None = None):
+    def __init__(self, stream: str, redis_url: str):
         import redis
 
         self.stream = stream
-        self.r = redis.from_url(redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
+        self.r = redis.from_url(redis_url, decode_responses=True)
 
     def emit(self, payload: dict[str, Any]) -> str:
         return cast(str, self.r.xadd(self.stream, {"json": json.dumps(payload, separators=(",", ":"))}))
@@ -136,14 +136,14 @@ def _get_stream_for_emit() -> _BaseStream:
     if _STREAM_SINGLETON is not None:
         return _STREAM_SINGLETON  # If producer already instanced a stream, re-use it.
 
-    TEST_MODE = os.getenv("TEST_MODE", "0") == "1"
+    TEST_WRITER = os.getenv("TEST_WRITER", "0") == "1"
     stream_name = os.getenv("BUFFER_STREAM", "buf:ingest")
 
-    if TEST_MODE:
-        # In TEST_MODE we *require* binding so producers and consumer share the same FakeServer.
+    if TEST_WRITER:
+        # In TEST_WRITER we *require* binding so producers and consumer share the same FakeServer.
         if not _FAKE_MODE_BOUND or _STREAM_SINGLETON is None:
             raise RuntimeError(
-                "TEST_MODE=1 but no stream bound. Call writer.init_stream()/bind_stream() before emit()."
+                "TEST_WRITER=1 but no stream bound. Call writer.init_stream()/bind_stream() before emit()."
             )
         return _STREAM_SINGLETON  # writer.init_stream() controls this stream in the test case
 

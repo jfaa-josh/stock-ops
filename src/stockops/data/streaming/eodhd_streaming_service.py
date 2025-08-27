@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -10,49 +11,46 @@ import websockets
 from stockops.config import config, eodhd_config
 from stockops.data.database.write_buffer import emit
 from stockops.data.transform import TransformData
-from stockops.data.utils import utcts_to_tzstr_parsed
+from stockops.data.utils import get_db_filename_for_date
 
 from .base_streaming_service import AbstractStreamingService
 
 logger = logging.getLogger(__name__)
+
+TEST_SERVICES = os.getenv("TEST_SERVICES", "0") == "1"
 
 
 class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
         pass
 
-    def make_db_filepath(self, exchange: str, year_str: str, month_str: str, day_str: str) -> Path:
-        filename = f"streaming_EODHD_{exchange}_{year_str}_{month_str}_{day_str}.db"
+    def write_data(self, table_name: str, exchange: str, transformed_row: dict, test_mode: bool):
+        filename = get_db_filename_for_date(
+            "streaming", self.tz, "EODHD", exchange, transformed_row["timestamp_UTC_ms"]
+        )
+        db_path = Path(config.RAW_STREAMING_DIR) / str(filename)
 
-        return config.RAW_STREAMING_DIR / filename
-
-    def write_data(self, table_name: str, exchange: str, transformed_row: dict):
-        yr_str, mo_str, day_str = utcts_to_tzstr_parsed(transformed_row["timestamp_UTC_ms"], self.tz)
-        db_path = self.make_db_filepath(exchange, yr_str, mo_str, day_str)
-
-        emit({"db_path": db_path, "table": table_name, "row": transformed_row})
+        if test_mode:
+            print({"db_path": db_path, "table": table_name, "row": transformed_row})
+        else:
+            emit({"db_path": db_path, "table": table_name, "row": transformed_row})
 
     async def _stream_data(
-        self,
-        ws_url: str,
-        stream_type: str,
-        exchange: str,
-        symbols: list[str],
-        duration: int,
+        self, ws_url: str, stream_type: str, exchange: str, tickers: list[str], duration: int, test_mode: bool
     ):
-        table_name = "No Ticker Set"
+        table_name = "No Ticker Set"  # This pulls from actual returned data rather than tickers
         transform = TransformData("EODHD", f"streaming_{stream_type}", "to_db_writer", exchange)
 
-        assert len(symbols) == 1, (
+        assert len(tickers) == 1, (
             "Please modify eodhd_streaming_service:_stream_data code to loop over multiple tickers..."
         )
 
         try:
             logger.info("Connecting to %s", ws_url)
             async with websockets.connect(ws_url) as websocket:
-                subscribe_msg = {"action": "subscribe", "symbols": ",".join(symbols)}
+                subscribe_msg = {"action": "subscribe", "symbols": ",".join(tickers)}
                 await websocket.send(json.dumps(subscribe_msg))
-                logger.info("Subscribed to %s on %s", symbols, ws_url)
+                logger.info("Subscribed to %s on %s", tickers, ws_url)
 
                 async with asyncio.timeout(duration):
                     async for message in websocket:
@@ -71,7 +69,7 @@ class EODHDStreamingService(AbstractStreamingService):
                                 logger.debug("[%s] Received data: %s", table_name, data)
                                 transformed_row = transform(data)
 
-                                self.write_data(table_name, exchange, transformed_row)
+                                self.write_data(table_name, exchange, transformed_row, test_mode)
 
                         except json.JSONDecodeError:
                             safe_message = (
@@ -94,6 +92,8 @@ class EODHDStreamingService(AbstractStreamingService):
             await asyncio.sleep(5)
 
     def start_stream(self, command: dict):
+        TEST_SERVICES = os.getenv("TEST_SERVICES", "0") == "1"
+
         required_keys = ["tickers", "duration", "stream_type", "exchange"]
         for key in required_keys:
             if key not in command:
@@ -114,4 +114,4 @@ class EODHDStreamingService(AbstractStreamingService):
         tz_str = cast(str, eodhd_config.EXCHANGE_METADATA[exchange.upper()]["Timezone"])
         self.tz = ZoneInfo(tz_str)
 
-        asyncio.run(self._stream_data(url, stream_type, exchange.upper(), tickers, duration))
+        asyncio.run(self._stream_data(url, stream_type, exchange.upper(), tickers, duration, TEST_SERVICES))

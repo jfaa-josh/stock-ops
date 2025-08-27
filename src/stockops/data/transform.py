@@ -1,6 +1,5 @@
 import logging
 
-# from zoneinfo import ZoneInfo
 from stockops.config import utils as cfg_utils  # , add additional providers here as needed
 from stockops.data.utils import validate_isodatestr, validate_utc_ts
 
@@ -22,6 +21,7 @@ class TransformData:
         raise ValueError(f"Unsupported provider: {self.provider}")
 
     def __call__(self, data_row: dict, interval: str = ""):
+        """Note: dtypes selected for sql storage efficiency based on expected values"""
         if self.provider == "EODHD":
             return self.eodhd(data_row, interval)
         raise ValueError(f"Unsupported provider: {self.provider}")
@@ -93,24 +93,5 @@ class TransformData:
                     "ask_size": data_row["as"],
                     "bid_size": data_row["bs"],
                 }
-
-        elif self.target == "from_db_reader":
-            if self.data_type == "historical_interday":
-                # HERE NO DATE CONVERSION IS NEEDED
-                transformed = dict(data_row)  # THIS IS A DUMMY TO PASS TYPECHECKING!!!
-            elif self.data_type == "historical_intraday":
-                # HERE I NEED TO CONVERT TS TO HUMAN READABLE DATE OF CORRECT ATOMIC UNIT IN LOCAL EXCHANGE TZ:
-                # - '1m': "%Y-%m-%d %H:%M"
-                # - '5m': "%Y-%m-%d %H:%M"
-                # - '1h': "%Y-%m-%d %H"
-                # self.tz_str
-                transformed = dict(data_row)  # THIS IS A DUMMY TO PASS TYPECHECKING!!!
-            elif self.data_type == "streaming":
-                # HERE I NEED TO CONVERT TS TO FRACTION SECONDS (MS TO S) THEN TO HUMAN READABLE DATE:
-                # "%Y-%m-%d %H:%M:%S.%f"
-                # self.tz_str
-                transformed = dict(data_row)  # THIS IS A DUMMY TO PASS TYPECHECKING!!!
-        else:
-            raise ValueError(f"Unsupported target: {self.target}")
 
         return transformed

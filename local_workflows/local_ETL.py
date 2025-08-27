@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Dict
-import sys
+import sys, os
 
 from stockops.data.historical.providers import get_historical_service
 from stockops.data.streaming.providers import get_streaming_service
@@ -44,12 +44,14 @@ def controller_driver_flow(
 
     run_controller_task(command, command_type, provider)
 
+os.environ["TEST_SERVICES"] = "1"
+
 provider = 'EODHD'
 
-# command = {'ticker': 'SPY', 'exchange': 'US', 'interval': '1h', 'start': '2025-07-02 09:30', 'end': '2025-07-03 16:00'}
-# command_type = 'fetch_historical'
-command = {'ticker': 'VOO', 'exchange': 'US', 'interval': 'd', 'start': '2024-10-25', 'end': '2024-11-04'}
+command = {'ticker': 'SPY', 'exchange': 'US', 'interval': '1h', 'start': '2025-07-02 09:30', 'end': '2025-07-03 16:00'}
 command_type = 'fetch_historical'
+# command = {'ticker': 'VOO', 'exchange': 'US', 'interval': 'd', 'start': '2024-10-25', 'end': '2024-11-04'}
+# command_type = 'fetch_historical'
 # command_type="start_stream"
 # command = {"stream_type": "trades", "tickers": 'SPY', 'exchange': 'US', "duration": 20}
 # command_type="start_stream"

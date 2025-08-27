@@ -13,6 +13,7 @@ from typing import Any
 from stockops.config import config
 from stockops.data.database import write_buffer as wb
 from stockops.data.database.sql_db import SQLiteWriter
+from stockops.data.utils import parse_db_filename
 
 # Logging setup
 logging.basicConfig(
@@ -58,7 +59,7 @@ def init_stream():
         return _STREAM  # idempotent
 
     stream_name = os.getenv("BUFFER_STREAM", "buf:ingest")
-    test_mode = os.getenv("TEST_MODE", "0") == "1"
+    test_mode = os.getenv("TEST_WRITER", "0") == "1"
 
     if test_mode:
         import fakeredis
@@ -151,7 +152,7 @@ def _group_by_file_table(
     return groups.items()
 
 
-def _batch_to_writer(writer: SQLiteWriter, msgs: list[tuple[str, dict[str, str]]]) -> list[str]:
+def _batch_to_writer(writer: SQLiteWriter, msgs: list[tuple[str, dict[str, Any]]]) -> list[str]:
     """
     Write to SQLite and return list of msg IDs that were successfully processed.
     Each message payload is expected to look like:
@@ -163,8 +164,13 @@ def _batch_to_writer(writer: SQLiteWriter, msgs: list[tuple[str, dict[str, str]]
     grouped_msgs = _group_by_file_table(msgs)
 
     ok_all: list[str] = []
-    for (db_path, table), batch in grouped_msgs:
-        ok_ids = writer.insert_many(Path(db_path), table, batch)
+    for (db_path_str, table), batch in grouped_msgs:
+        db_path = Path(db_path_str)
+        file_str = db_path.name
+        parsed_dict = parse_db_filename(file_str)
+        ok_ids = writer.insert_many(
+            db_path, table, batch, parsed_dict["provider"], parsed_dict["exchange"], parsed_dict["data_type"]
+        )
         ok_all.extend(ok_ids)
     return ok_all
 

@@ -1,21 +1,26 @@
+from __future__ import annotations
+
 import json
 import logging
-import os
 import sqlite3
+from collections import defaultdict
+from decimal import Decimal
+from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
-import pandas as pd
+import numpy as np
 
 from stockops.config import utils as cfg_utils  # , add additional providers here as needed
+from stockops.data.database.utils import set_ts_col
+from stockops.data.utils import normalize_ts_to_seconds, validate_isodatestr
 
 logger = logging.getLogger(__name__)
 
-
-class _TableCache(TypedDict):
-    cols: list[str]
-    insert_cols: list[str]
-    insert_sql: str
+IndexMode = ["historical_intraday", "streaming", "historical_interday"]
+# historical_intraday: ("timestamp_UTC_s", "interval")
+# streaming: ("timestamp_UTC_ms",)
+# historical_interday: ("date", "interval")
 
 
 class SQLiteWriter:
@@ -23,407 +28,523 @@ class SQLiteWriter:
         self._conn: sqlite3.Connection | None = None
         self._cursor: sqlite3.Cursor | None = None
         self._open_for: tuple[Path, str] | None = None
-        self._table_cache: dict[tuple[Path, str], _TableCache] = {}
+        # cache by (db, table)
+        self._table_meta: dict[tuple[Path, str], dict[str, Any]] = {}
 
-    def parse_provider_exchange(self, db_filepath: Path) -> tuple[str, str]:
-        name = db_filepath.stem
-        parts = name.split("_")
+    def update_min_max(self, val, mn, mx):
+        """Update min/max with a single comparison each (no branching)."""
+        if val is None:
+            return mn, mx
+        mn = val if mn is None else (val if val < mn else mn)
+        mx = val if mx is None else (val if val > mx else mx)
+        return mn, mx
 
-        if parts[0] == "historical":
-            # historical_interday_EODHD_US...
-            return parts[2], parts[3]
-        elif parts[0] == "streaming":
-            # streaming_EODHD_US_...
-            return parts[1], parts[2]
+    # ---------- Type inference ----------
+    def infer_sqlite_affinity(self, val: Any) -> str:
+        if val is None:
+            return "TEXT"
+        if isinstance(val, (bytes | bytearray | memoryview)):
+            return "BLOB"
+        if isinstance(val, (bool | np.bool_)):
+            return "INTEGER"
+        if isinstance(val, (Integral | np.integer)):
+            return "INTEGER"
+        if isinstance(val, Decimal):
+            return "NUMERIC"
+        if isinstance(val, (Real | np.floating)):
+            return "REAL"
+        return "TEXT"
+
+    # ---------- Index mode helpers ----------
+    def _set_index_from_mode(self, provider: str, mode: str) -> list[str]:
+        self.ts_col = set_ts_col(provider, mode)
+
+        if mode in ["historical_interday", "historical_intraday"]:
+            return [self.ts_col, "interval"]
+        elif mode == "streaming":
+            return [self.ts_col]
         else:
-            raise ValueError(f"Unexpected filename format: {name}")
+            raise ValueError(f"Mode {mode} not recognized.")
 
-    def _ensure_open(self, db_filepath: Path, table_name: str, data: dict[str, Any]) -> None:
-        """Open (db_filepath, table_name) if needed, create/evolve schema, create indexes, seed metadata."""
-        target = (db_filepath, table_name)
-        needs_open = (self._open_for != target) or (self._conn is None) or (self._cursor is None)
+    def _migrate_table_schema(
+        self, conn: sqlite3.Connection, cur: sqlite3.Cursor, table_name: str, mode: str, idx_cols: list[str]
+    ) -> bool:
+        """
+        If existing declared column types are weaker/mismatched and we now have
+        stronger desired affinities, rebuild the table with the new declarations.
 
-        if not needs_open:
-            return
-
-        self.close()  # Close any prior DB
-
-        # --- Path sanity & directory creation ---
-        db_filepath = Path(db_filepath)
-        parent = db_filepath.parent
-        try:
-            parent.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            raise RuntimeError(f"Failed to create parent directory {parent}: {e}") from e
-        if parent.is_file():
-            raise RuntimeError(f"DB parent is a file, not a directory: {parent}")
-        if db_filepath.exists() and db_filepath.is_dir():
-            raise RuntimeError(f"DB path points to a directory: {db_filepath}")
-
-        # Ensure parent is writable *and* traversable
-        if not os.access(parent, os.W_OK | os.X_OK):
-            st = parent.stat()
-            mode = oct(st.st_mode & 0o777)
-            owner = getattr(st, "st_uid", "N/A")
-            group = getattr(st, "st_gid", "N/A")
-            raise RuntimeError(f"DB parent not writable/traversable: {parent} (mode={mode} uid={owner} gid={group})")
-
-        # If DB file missing but sidecars remain from a previous run, remove them
-        if not db_filepath.exists():
-            for suf in ("-wal", "-shm"):
-                sidecar = Path(str(db_filepath) + suf)
-                try:
-                    if sidecar.exists():
-                        sidecar.unlink()
-                except Exception:
-                    logger.debug("Could not remove orphan sidecar %s", sidecar, exc_info=True)
-
-        existed_before = db_filepath.exists()
-
-        # Open connection (single call) with richer diagnostics on failure
-        try:
-            conn = sqlite3.connect(str(db_filepath))
-        except sqlite3.OperationalError as e:
-            try:
-                st = parent.stat()
-                mode = oct(st.st_mode & 0o777)
-                owner = st.st_uid
-                group = st.st_gid
-            except Exception:
-                mode = owner = group = "?"
-            raise RuntimeError(
-                f"Failed to open SQLite DB at {db_filepath} "
-                f"(parent={parent}, exists={parent.exists()}, mode={mode}, uid={owner}, gid={group})"
-            ) from e
-
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA wal_autocheckpoint=1000")
-        conn.execute("PRAGMA busy_timeout=5000;")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-
-        # Seed DB-level metadata once per DB (first open on a new file)
-        if not existed_before:
-            cur.execute('CREATE TABLE IF NOT EXISTS "__meta__" (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-            try:
-                provider, exchange = self.parse_provider_exchange(db_filepath)
-                meta = cfg_utils.ProviderConfig(provider, exchange).cfg.EXCHANGE_METADATA[exchange]
-            except Exception:
-                logger.warning("Skipping provider metadata seeding; parse/lookup failed.", exc_info=True)
-                meta = {}
-                provider, exchange = "UNKNOWN", "UNKNOWN"
-            rows = [(str(k), json.dumps(v) if isinstance(v, dict) else str(v)) for k, v in meta.items()]
-            rows.extend([("provider", provider), ("exchange", exchange), ("created_utc", "CURRENT_TIMESTAMP")])
-            cur.executemany('INSERT OR REPLACE INTO "__meta__"(key, value) VALUES (?, ?)', rows)
-            # Fix created_utc to real timestamp (replace literal)
-            cur.execute('UPDATE "__meta__" SET value = CURRENT_TIMESTAMP WHERE key = "created_utc"')
-
-        # Optional fast stats table
-        cur.execute(
-            'CREATE TABLE IF NOT EXISTS "__table_stats__" ('
-            "table_name TEXT PRIMARY KEY, "
-            "row_count INTEGER NOT NULL DEFAULT 0, "
-            "min_timestamp_utc_s REAL, "
-            "max_timestamp_utc_s REAL, "
-            "min_date TEXT, "
-            "max_date TEXT, "
-            "updated_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
-        )
-
-        # --- Create baseline table if missing, then evolve columns ---
-        # Ensure 'version' is always present as INTEGER NOT NULL DEFAULT 1
-        wanted_cols = list(dict.fromkeys([*data.keys(), "version"]))
-
-        # If table is new, create with all known cols; version is INTEGER
-        # New data-derived columns are TEXT (flexible ingestion)
-        col_defs = []
-        for k in wanted_cols:
-            if k == "version":
-                col_defs.append('"version" INTEGER NOT NULL DEFAULT 1')
-            else:
-                col_defs.append(f'"{k}" TEXT')
-        cur.execute(f'CREATE TABLE IF NOT EXISTS "{table_name}" ({", ".join(col_defs)})')
-
-        # Evolve: add any missing cols (version integer; others TEXT, NULL default)
+        Returns True if a migration was performed.
+        """
+        # Load current schema
         cur.execute(f'PRAGMA table_info("{table_name}")')
-        existing_cols = {row["name"] for row in cur.fetchall()}
+        info = cur.fetchall()
+        existing_cols = [row["name"] for row in info]
+        existing_decl = {row["name"]: (row["type"] or "").upper() for row in info}
 
-        schema_changed = False
-        if "version" not in existing_cols:
-            cur.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1')
-            schema_changed = True
+        # Columns we never rewrite
+        protected = set(idx_cols) | {"version"}
 
-        for col in wanted_cols:
-            if col in existing_cols or col == "version":
+        # Decide which columns need upgrading
+        to_upgrade: dict[str, str] = {}
+        for col, want in (self.target_affinity or {}).items():
+            if col in protected:
                 continue
-            cur.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{col}" TEXT')
-            schema_changed = True
+            if want is None:
+                # still unknown → no upgrade yet
+                continue
+            have_u = existing_decl.get(col, "")
+            if col in existing_decl:
+                # Rewrite if declared type is empty (NONE) or TEXT/NUMERIC and differs from target.
+                if have_u != want:
+                    to_upgrade[col] = want
 
-        # Create recommended indexes if applicable (idempotent)
-        cur.execute(f'PRAGMA table_info("{table_name}")')
-        existing_cols = {row["name"] for row in cur.fetchall()}  # refresh if changed
+        if not to_upgrade:
+            return False
 
-        if {"timestamp_UTC_s", "interval"} <= existing_cols:
-            cur.execute(
-                f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_ts_interval" '
-                f'ON "{table_name}"("timestamp_UTC_s","interval")'
-            )
-        elif {"timestamp_UTC_ms", "interval"} <= existing_cols:
-            cur.execute(
-                f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_ts_ms_interval" '
-                f'ON "{table_name}"("timestamp_UTC_ms","interval")'
-            )
-        elif {"date", "interval"} <= existing_cols:
-            cur.execute(
-                f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_date_interval" ON "{table_name}"("date","interval")'
-            )
-        # If you supply a unique message id in incoming rows, index it:
-        if "msg_id" in existing_cols:
-            cur.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS "idx_{table_name}_msg_id" ON "{table_name}"("msg_id")')
+        # Build new table DDL: keep order as existing, with upgraded types for the chosen columns.
+        def coldef(name: str) -> str:
+            if name in idx_cols:
+                return f"{name} {self.target_affinity[name]} NOT NULL"
+            if name == "version":
+                return '"version" INTEGER NOT NULL DEFAULT 1'
+            # data columns
+            tgt = to_upgrade.get(name)
+            if tgt:
+                return f'"{name}" {tgt}'
+            # keep original declaration (may be NONE/"")
+            have = existing_decl.get(name, "")
+            if have:
+                return f'"{name}" {have}'
+            else:
+                # NONE affinity = declare without a type
+                return f'"{name}"'
 
-        conn.commit()
-        self._conn, self._cursor = conn, cur
-        self._open_for = target
+        new_cols_defs = ", ".join(coldef(c) for c in existing_cols)
+        tmp_name = f"__tmp_{table_name}"
 
-        # Invalidate cached prepared SQL if schema changed
-        if schema_changed:
-            self._table_cache.pop(target, None)
-
-    def insert_many(self, db_filepath: Path, table_name: str, batch: list[tuple[str, dict[str, Any]]]) -> list[str]:
-        """
-        Insert rows for (db_filepath, table_name) with versioning and dedupe semantics.
-
-        Returns a List[msg_id]: Append msg_id if row was inserted (changed count increased).
-        Duplicates ignored by UNIQUE (e.g., msg_id).
-
-        Efficiency features:
-        - integer 'version' column
-        - cached table metadata & prepared INSERT
-        - batched MAX(version) lookups for pair keys
-        - single transaction for entire batch (no per-row savepoints)
-        """
-        if not batch:
-            return []
-
-        msg_ids: list[str] = []
-        rows: list[dict[str, Any]] = []
-        for _id, payload in batch:
-            msg_ids.append(_id)
-            rows.append(dict(payload["row"]))
-
-        # 1) Union of batch keys (exclude 'version' – managed internally)
-        all_keys: list[str] = []
-        seen = set()
-        for r in rows:
-            for k in r.keys():
-                if k == "version":
-                    continue
-                if k not in seen:
-                    seen.add(k)
-                    all_keys.append(k)
-
-        # Ensure 'msg_id' and 'version' exists in schema
-        ensure_keys = [*all_keys, "msg_id", "version"]
-        self._ensure_open(db_filepath, table_name, dict.fromkeys(ensure_keys))
-        if self._conn is None or self._cursor is None:
-            raise RuntimeError("Database connection not open")
-
-        conn, cur = self._conn, self._cursor
-        cache_key = (db_filepath, table_name)
-
-        # 2) Load or build cached metadata & prepared INSERT
-        tbl_cache: _TableCache | None = self._table_cache.get(cache_key)
-        if tbl_cache is None:
-            cur.execute(f'PRAGMA table_info("{table_name}")')
-            table_cols: list[str] = [str(row["name"]) for row in cur.fetchall()]
-
-            wanted: set[str] = set(all_keys) | {"msg_id"}
-            insert_cols: list[str] = [c for c in table_cols if c in wanted] + (
-                ["version"] if "version" in table_cols else []
-            )
-
-            placeholders: str = ", ".join("?" for _ in insert_cols)
-            columns_sql: str = ", ".join(f'"{c}"' for c in insert_cols)
-            insert_sql: str = f'INSERT OR IGNORE INTO "{table_name}" ({columns_sql}) VALUES ({placeholders})'
-
-            # Build a value that is statically _TableCache
-            new_cache: _TableCache = {
-                "cols": table_cols,
-                "insert_cols": insert_cols,
-                "insert_sql": insert_sql,
-            }
-            self._table_cache[cache_key] = new_cache
-            cache: _TableCache = new_cache
-        else:
-            cache = tbl_cache  # already _TableCache
-
-        table_cols = cache["cols"]
-        insert_cols = cache["insert_cols"]
-        insert_sql = cache["insert_sql"]
-
-        # dynamic pair-key selection (first match)
-        pair_cols: tuple[str, str] | None = None
-        if {"timestamp_UTC_s", "interval"} <= set(table_cols):
-            pair_cols = ("timestamp_UTC_s", "interval")
-        elif {"timestamp_UTC_ms", "interval"} <= set(table_cols):
-            pair_cols = ("timestamp_UTC_ms", "interval")
-        elif {"date", "interval"} <= set(table_cols):
-            pair_cols = ("date", "interval")
-
-        pair_to_maxv: dict[tuple[Any, Any], int] = {}
-        if pair_cols is not None:
-            # collect unique pairs present in this batch
-            p0, p1 = pair_cols
-            pairs: set[tuple[Any, Any]] = set()
-            for r in rows:
-                if p0 in r and p1 in r:
-                    pairs.add((r.get(p0, None), r.get(p1, None)))
-            if pairs:
-                # Build a single batched query
-                # SQLite lacks tuple IN for parameters directly; emulate with OR chain
-                where_terms = []
-                params: list[Any] = []
-                for a, b in pairs:
-                    if a is None and b is None:
-                        where_terms.append(f'("{p0}" IS NULL AND "{p1}" IS NULL)')
-                    elif a is None:
-                        where_terms.append(f'("{p0}" IS NULL AND "{p1}" = ?)')
-                        params.append(b)
-                    elif b is None:
-                        where_terms.append(f'("{p0}" = ? AND "{p1}" IS NULL)')
-                        params.append(a)
-                    else:
-                        where_terms.append(f'("{p0}" = ? AND "{p1}" = ?)')
-                        params.extend([a, b])
-                sql = (
-                    f'SELECT "{p0}" AS k0, "{p1}" AS k1, MAX("version") AS maxv '
-                    f'FROM "{table_name}" '
-                    f"WHERE " + " OR ".join(where_terms) + " "
-                    f'GROUP BY "{p0}", "{p1}"'
-                )
-                cur.execute(sql, params)
-                for row in cur.fetchall():
-                    pair_key = (row["k0"], row["k1"])
-                    pair_to_maxv[pair_key] = int(row["maxv"]) if row["maxv"] is not None else 0
-
-        # 4) Insert loop: single transaction, per-row try/except (no savepoints)
-        ok_ids: list[str] = []
-        inserted_count = 0
-        # Precompute for stats update
-        batch_min_ts = None  # seconds (if ms provided, convert /1000 when numeric)
-        batch_max_ts = None
-        batch_min_date = None
-        batch_max_date = None
-
+        conn.execute("BEGIN IMMEDIATE")
         try:
-            conn.execute("BEGIN IMMEDIATE")
+            # 1) Create tmp table with upgraded DDL
+            cur.execute(f'CREATE TABLE "{tmp_name}" ({new_cols_defs})')
 
-            for idx, r in enumerate(rows):
-                before = conn.total_changes
+            # 2) Copy data
+            col_list_sql = ", ".join(f'"{c}"' for c in existing_cols)
+            cur.execute(f'INSERT INTO "{tmp_name}" ({col_list_sql}) SELECT {col_list_sql} FROM "{table_name}"')
 
-                # --- Empty-row filter: skip rows where all data (except time &/| interval) are None
-                ts_key = (
-                    "timestamp_UTC_s"
-                    if "timestamp_UTC_s" in r
-                    else ("timestamp_UTC_ms" if "timestamp_UTC_ms" in r else ("date" if "date" in r else None))
-                )
-                non_data = {"interval"}
-                if ts_key:
-                    non_data.add(ts_key)
-                if all(r.get(k) is None for k in r.keys() if k not in non_data):
-                    # Do not store; processed for idempotency/ACK purposes
-                    ok_ids.append(msg_ids[idx])
-                    continue
+            # 3) Drop old and rename tmp
+            cur.execute(f'DROP TABLE "{table_name}"')
+            cur.execute(f'ALTER TABLE "{tmp_name}" RENAME TO "{table_name}"')
 
-                # Determine version
-                version_val = 1
-                if pair_cols is not None:
-                    p0, p1 = pair_cols
-                    if p0 in r and p1 in r:
-                        key = (r.get(p0, None), r.get(p1, None))
-                        maxv = pair_to_maxv.get(key)
-                        if maxv is not None and maxv > 0:
-                            version_val = maxv + 1
-
-                # Prepare values aligned to insert_cols
-                vals: list[Any] = []
-                for c in insert_cols:
-                    if c == "version":
-                        vals.append(version_val)
-                    elif c == "msg_id":
-                        vals.append(msg_ids[idx])
-                    else:
-                        vals.append(r.get(c, None))
-
-                # Try insert; ignore duplicates via OR IGNORE (e.g., msg_id unique)
-                try:
-                    cur.execute(insert_sql, vals)
-                    changed = (conn.total_changes - before) > 0
-                    if changed:
-                        ok_ids.append(msg_ids[idx])
-                        inserted_count += 1
-                        # fast stats: prefer seconds, else ms->s if numeric, else date text
-                        if "timestamp_UTC_s" in r and r["timestamp_UTC_s"] is not None:
-                            ts = float(r["timestamp_UTC_s"])
-                            batch_min_ts = ts if batch_min_ts is None else min(batch_min_ts, ts)
-                            batch_max_ts = ts if batch_max_ts is None else max(batch_max_ts, ts)
-                        elif "timestamp_UTC_ms" in r and r["timestamp_UTC_ms"] is not None:
-                            try:
-                                tsms = float(r["timestamp_UTC_ms"])
-                                ts = tsms / 1000.0
-                                batch_min_ts = ts if batch_min_ts is None else min(batch_min_ts, ts)
-                                batch_max_ts = ts if batch_max_ts is None else max(batch_max_ts, ts)
-                            except (TypeError, ValueError):
-                                pass
-                        if "date" in r and r["date"] is not None:
-                            d = r["date"]
-                            batch_min_date = d if batch_min_date is None else min(batch_min_date, d)
-                            batch_max_date = d if batch_max_date is None else max(batch_max_date, d)
-                except Exception:
-                    # Row failed; continue
-                    pass
+            # 4) Recreate indexes
+            cur.execute(
+                f'CREATE INDEX IF NOT EXISTS "ix_{table_name}_" ON "{table_name}" '
+                f"({', '.join(f'"{c}"' for c in idx_cols)})"
+            )
+            cur.execute(
+                f'CREATE UNIQUE INDEX IF NOT EXISTS "ux_{table_name}_ver" '
+                f'ON "{table_name}" ({", ".join(f'"{c}"' for c in idx_cols)},"version")'
+            )
 
             conn.commit()
         except Exception:
             conn.rollback()
             raise
 
-        # 5) Update fast table stats (row_count, min/max ranges) in O(1)
+        # refresh cache
+        cur.execute(f'PRAGMA table_info("{table_name}")')
+        if self._open_for is None:
+            raise RuntimeError("Failed to initialize _open_for")
+        self._table_meta[self._open_for] = {
+            "mode": mode,
+            "cols": {row["name"] for row in cur.fetchall()},
+        }
+        return True
+
+    def _verify_or_create_tables(
+        self,
+        cur: sqlite3.Cursor,
+        table_name: str,
+        mode: str,
+        idx_cols: list[str],
+        provider: str,
+        exchange: str,
+        db_just_opened: bool,
+    ) -> None:
+        # Ensure meta & stats tables exist (DB-level)
+        cur.execute('CREATE TABLE IF NOT EXISTS "__meta__" (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+        cur.execute(
+            'CREATE TABLE IF NOT EXISTS "__table_stats__" ('
+            "  table_name TEXT PRIMARY KEY,"
+            "  row_count INTEGER NOT NULL DEFAULT 0,"
+            "  min_timestamp_utc_s REAL,"
+            "  max_timestamp_utc_s REAL,"
+            "  min_date TEXT,"
+            "  max_date TEXT,"
+            "  updated_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        cur.execute(
+            'CREATE TABLE IF NOT EXISTS "__interval_stats__" ('
+            "  table_name TEXT NOT NULL,"
+            "  interval   TEXT NOT NULL,"
+            "  row_count  INTEGER NOT NULL DEFAULT 0,"
+            "  min_timestamp_utc_s REAL,"
+            "  max_timestamp_utc_s REAL,"
+            "  min_date TEXT,"
+            "  max_date TEXT,"
+            "  updated_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+            "  PRIMARY KEY (table_name, interval)"
+            ")"
+        )
+
+        if db_just_opened:
+            try:
+                # mimic old code: get metadata from cfg_utils
+                meta = cfg_utils.ProviderConfig(provider, exchange).cfg.EXCHANGE_METADATA[exchange]
+            except Exception as e:
+                logger.warning("Skipping provider metadata seeding; parse/lookup failed.", exc_info=True)
+                raise e
+
+            rows = [(str(k), json.dumps(v) if isinstance(v, dict) else str(v)) for k, v in meta.items()]
+            rows.extend(
+                [
+                    ("provider", provider),
+                    ("exchange", exchange),
+                ]
+            )
+            cur.executemany('INSERT OR REPLACE INTO "__meta__"(key, value) VALUES (?, ?)', rows)
+            # Fix created_utc to real timestamp
+            cur.execute('UPDATE "__meta__" SET value = CURRENT_TIMESTAMP WHERE key = "created_utc"')
+
+        # Create data table if missing
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+        exists = cur.fetchone() is not None
+
+        if not exists:
+            col_defs = []
+            for c in idx_cols:
+                col_defs.append(f"{c} {self.target_affinity[c]} NOT NULL")
+            col_defs.append('"version" INTEGER NOT NULL DEFAULT 1')
+            cur.execute(f'CREATE TABLE "{table_name}" ({", ".join(col_defs)})')
+
+            # indexes
+            cur.execute(
+                f'CREATE INDEX IF NOT EXISTS "ix_{table_name}_" ON "{table_name}" '
+                f"({', '.join(f'"{c}"' for c in idx_cols)})"
+            )
+            cur.execute(
+                f'CREATE UNIQUE INDEX IF NOT EXISTS "ux_{table_name}_ver" '
+                f'ON "{table_name}" ({", ".join(f'"{c}"' for c in idx_cols)},"version")'
+            )
+
+    def _ensure_open(
+        self, db_filepath: Path, table_name: str, mode: str, idx_cols: list[str], provider: str, exchange: str
+    ) -> None:
+        """Open DB; create/verify meta, stats, and the table with the requested mode."""
+        target = (db_filepath, table_name)
+        need_open = (self._open_for != target) or (self._conn is None) or (self._cursor is None)
+        if need_open:
+            # open
+            self.close()
+            db_filepath.parent.mkdir(parents=True, exist_ok=True)
+            uri = f"file:{str(db_filepath)}?mode=rwc"  # read-write, create if needed
+            conn = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=5000;")
+            cur = conn.execute("PRAGMA journal_mode;")
+            mode = cur.fetchone()[0].upper()
+            if mode != "WAL":
+                # This requires the directory to be writable
+                conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA wal_autocheckpoint=1000;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            cur = conn.cursor()
+            self._conn, self._cursor, self._open_for = conn, cur, target
+
+            # Create/verify meta + stats + table
+            self._verify_or_create_tables(cur, table_name, mode, idx_cols, provider, exchange, True)
+            conn.commit()
+        if self._cursor is None:
+            raise RuntimeError("Failed to initialize cursor")
+
+        # if table already exists: verify compatible
+        cur = self._cursor
+        cur.execute(f'PRAGMA table_info("{table_name}")')
+        existing_cols = {row["name"] for row in cur.fetchall()}
+
+        required = set(idx_cols) | {"version"}
+        # mode compatibility: required index columns must exist exclusively as per mode
+        if not required.issubset(existing_cols):
+            raise RuntimeError(
+                f'Table "{table_name}" does not match requested mode {mode}; '
+                f"missing required columns {sorted(required - existing_cols)}."
+            )
+
+        # cache table columns
+        self._table_meta[target] = {"mode": mode, "cols": existing_cols}
+
+    def _evolve_columns(self, cur: sqlite3.Cursor, table_name: str, needed_cols: set[str]) -> None:
+        """
+        Add new columns with requested affinities.
+        - self.target_affinity[col] == None  -> declare without a type (affinity NONE)
+        - self.target_affinity[col] == 'REAL'/'INTEGER'/... -> declare with that type
+        If column already exists, leave as-is (log if different).
+        """
+        cur.execute(f'PRAGMA table_info("{table_name}")')
+        info = cur.fetchall()
+        existing = {row["name"]: row for row in info}
+        to_add = [c for c in needed_cols if c not in existing and c != "version"]
+
+        # Add new columns
+        for c in to_add:
+            aff = self.target_affinity.get(c)
+            if aff is None:
+                # declare WITHOUT a type -> affinity NONE
+                cur.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{c}"')
+            else:
+                cur.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{c}" {aff}')
+        if to_add:
+            cur.connection.commit()
+            key = self._open_for
+            assert key is not None, "SQLiteWriter._open_for not initialized"
+            self._table_meta[key]["cols"] |= set(to_add)
+
+        # Warn when inferred type disagrees with declared type (purely informational; we do not rewrite)
+        if self.target_affinity:
+            cur.execute(f'PRAGMA table_info("{table_name}")')
+            after = {row["name"]: row for row in cur.fetchall()}
+            for c in needed_cols:
+                if c in after and c in self.target_affinity:
+                    declared = (after[c]["type"] or "").upper()  # may be '' when NONE
+                    inferred = (self.target_affinity[c] or "").upper()
+                    if declared and inferred and declared != inferred:
+                        logger.debug(
+                            'Column "%s" declared as %s but inferred %s (leaving as-is).', c, declared, inferred
+                        )
+
+    def insert_many(
+        self,
+        db_filepath: Path,
+        table_name: str,
+        batch: list[tuple[str, dict[str, Any]]],
+        provider: str,
+        exchange: str,
+        mode: str,
+    ) -> list[str]:
+        """
+        Batch insert with dedup/version semantics.
+
+        - Homogeneous index mode across the batch (validated here).
+        - 'msg_id' is required in payload for ACKs but is NOT stored.
+        - Dedup:
+            1) Subset by index exact match (via index).
+            2) If any row in subset matches all payload keys (ignoring DB-only cols), skip (dup) but ACK.
+            3) Else insert with version = max(existing.version)+1. If subset empty, version=1.
+        """
+        assert mode in IndexMode, "Unknown data_type passed as mode to sql_db.insert_many()"
+        if not batch:
+            return []
+
+        # Validate homogeneous table and db_filepath across batch
+        idx_cols = self._set_index_from_mode(provider, mode)  # Consistency checks have been done in writer.py
+
+        # Track interval stats
+        track_intervals = mode != "streaming"
+        interval_tally: defaultdict[str, dict[str, Any]] = defaultdict(
+            lambda: {
+                "count": 0,
+                "min_ts": None,
+                "max_ts": None,
+                "min_date": None,
+                "max_date": None,
+            }
+        )
+
+        check_all = all(d.get("db_path") == str(db_filepath) and d.get("table") == table_name for _, d in batch)
+        if not check_all:
+            raise ValueError("Mixed index configurations within the same batch are not allowed.")
+
+        # Evolve data columns (non-index, non-version, non-msg_id) with type inference from sample values
+        affinity_cols = set().union(*(p["row"].keys() for _, p in batch))
+
+        first_non_null: dict[str, Any] = dict.fromkeys(affinity_cols)
+        for _, dict_p in batch:
+            p = dict_p["row"]
+            for c in affinity_cols:
+                if first_non_null[c] is None:
+                    v = p.get(c)
+                    if v is not None:
+                        first_non_null[c] = v
+
+        # Decide the target declared type per column (affinity)
+        # None -> declare with no type (affinity NONE)
+        self.target_affinity: dict[str, str | None] = {}
+        for c in affinity_cols:
+            v = first_non_null[c]
+            if v is not None:
+                self.target_affinity[c] = self.infer_sqlite_affinity(v)
+        payload_cols = affinity_cols - (set(idx_cols) | {"version"})  # All non None
+
+        # Open / verify schema for this mode
+        self._ensure_open(db_filepath, table_name, mode, idx_cols, provider, exchange)
+        if self._cursor is None or self._conn is None:
+            raise RuntimeError("Failed to initialize cursor, conn, or target")
+        conn, cur = self._conn, self._cursor
+
+        # If existing table contains col with no type, but current batch can be used to type col...
+        # Opportunistic migration for already-existing weak declarations
+        # Note: this works because previously untyped cols are unlikely to be large tables
+        self._migrate_table_schema(conn, cur, table_name, mode=mode, idx_cols=idx_cols)
+
+        # Then evolve columns for any *new* columns (those not yet present)
+        self._evolve_columns(cur, table_name, payload_cols)
+
+        # Prepare SELECT for index subset
+        where_sql = " AND ".join([f'"{c}" = ?' for c in idx_cols])
+        select_subset_sql = f'SELECT * FROM "{table_name}" WHERE {where_sql};'
+
+        # Prepare insert columns (index + payload_cols∩table + version)
+        cur.execute(f'PRAGMA table_info("{table_name}")')
+        table_cols = [row["name"] for row in cur.fetchall()]
+        non_index_payload_cols = [c for c in table_cols if c in payload_cols]
+        insert_cols = idx_cols + non_index_payload_cols + ["version"]
+        placeholders = ", ".join("?" for _ in insert_cols)
+        insert_sql = (
+            f'INSERT INTO "{table_name}" ({", ".join(f"""\"{c}\"""" for c in insert_cols)}) VALUES ({placeholders});'
+        )
+
+        ok_ids: list[str] = []
+
+        # Stats accumulation
+        batch_min_ts = None  # seconds
+        batch_max_ts = None
+        batch_min_date = None
+        batch_max_date = None
+
+        conn.execute("BEGIN IMMEDIATE")
         try:
-            if inserted_count > 0:
-                # Initialize stats row if missing
+            for tup_in in batch:
+                msg_id = tup_in[0]
+                if not isinstance(msg_id, str) or not msg_id.strip():
+                    raise ValueError("Each payload must include a non-empty 'msg_id' string.")
+
+                payload = tup_in[1]["row"]
+
+                # Test and reject empy payload
+                is_blank_data = all(payload.get(k) is None for k in payload_cols)
+                if is_blank_data:
+                    ok_ids.append(msg_id)
+                    continue
+
+                # Build index values (must be present)
+                idx_vals = tuple(payload[c] for c in idx_cols)
+
+                # 1) Subset by index
+                cur.execute(select_subset_sql, idx_vals)
+                subset_rows = cur.fetchall()
+
+                # Keys to compare for exactness
+                cmp_keys = [k for k in payload.keys() if k not in {"msg_id", "version"}]
+
+                # 2) Exact-match across cmp_keys?
+                is_exact_dup = False
+                max_version = 0
+                for r in subset_rows:
+                    rv = int(r["version"]) if r["version"] is not None else 0
+                    if rv > max_version:
+                        max_version = rv
+                    # compare cmp_keys
+                    all_equal = True
+                    for k in cmp_keys:
+                        db_val = r[k] if k in r.keys() else None
+                        if db_val != payload.get(k):
+                            all_equal = False
+                            break
+                    if all_equal:
+                        is_exact_dup = True
+                        break
+
+                if is_exact_dup:
+                    ok_ids.append(msg_id)
+                    continue
+
+                # 3) versioning
+                new_version = 1 if not subset_rows else (max_version + 1)
+
+                # Assemble values for insert
+                row_vals: list[Any] = []
+                row_vals.extend(payload.get(c) for c in idx_cols)  # index
+                row_vals.extend(payload.get(c) for c in non_index_payload_cols)  # data
+                row_vals.append(int(new_version))  # version
+                cur.execute(insert_sql, row_vals)
+                ok_ids.append(msg_id)
+
+                # Update tally for row interval stats
+                if track_intervals:
+                    iv = payload.get("interval")
+                    if iv is not None:
+                        s = interval_tally[str(iv)]
+                        s["count"] += 1
+                        v = payload.get(self.ts_col)
+
+                        if isinstance(v, int):
+                            ts_sec = normalize_ts_to_seconds(v)
+                            s["min_ts"], s["max_ts"] = self.update_min_max(ts_sec, s["min_ts"], s["max_ts"])
+                        elif isinstance(v, str):
+                            d = validate_isodatestr(v)
+                            s["min_date"], s["max_date"] = self.update_min_max(d, s["min_date"], s["max_date"])
+
+                # Stats update inputs
+                v = payload.get(self.ts_col)
+
+                # Fast numeric path (no exceptions)
+                if isinstance(v, int):
+                    ts_sec = normalize_ts_to_seconds(v)
+                    batch_min_ts, batch_max_ts = self.update_min_max(ts_sec, batch_min_ts, batch_max_ts)
+                # String: try digit-only first (still no exceptions)
+                elif isinstance(v, str):
+                    d = validate_isodatestr(v)
+                    batch_min_date, batch_max_date = self.update_min_max(d, batch_min_date, batch_max_date)
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+        # __table_stats__: apply O(1) updates once per batch
+        try:
+            if ok_ids:
                 cur.execute('INSERT OR IGNORE INTO "__table_stats__"(table_name) VALUES (?)', (table_name,))
-                # row_count += inserted_count
                 cur.execute(
-                    'UPDATE "__table_stats__" SET row_count = row_count + ?, updated_utc = '
-                    "CURRENT_TIMESTAMP WHERE table_name = ?",
-                    (inserted_count, table_name),
+                    'UPDATE "__table_stats__" SET row_count = row_count + ?, updated_utc = CURRENT_TIMESTAMP '
+                    "WHERE table_name = ?",
+                    (len(ok_ids), table_name),
                 )
-                # min/max timestamp_utc_s
                 if batch_min_ts is not None:
                     cur.execute(
-                        'UPDATE "__table_stats__" SET min_timestamp_utc_s = COALESCE(min(min_timestamp_utc_s, ?), ?), '
+                        'UPDATE "__table_stats__" SET '
+                        "min_timestamp_utc_s = COALESCE(min(min_timestamp_utc_s, ?), ?), "
                         "updated_utc = CURRENT_TIMESTAMP WHERE table_name = ?",
                         (batch_min_ts, batch_min_ts, table_name),
                     )
                 if batch_max_ts is not None:
                     cur.execute(
-                        'UPDATE "__table_stats__" SET max_timestamp_utc_s = COALESCE(max(max_timestamp_utc_s, ?), ?), '
+                        'UPDATE "__table_stats__" SET '
+                        "max_timestamp_utc_s = COALESCE(max(max_timestamp_utc_s, ?), ?), "
                         "updated_utc = CURRENT_TIMESTAMP WHERE table_name = ?",
                         (batch_max_ts, batch_max_ts, table_name),
                     )
-                # min/max date (lexicographic if YYYY-MM-DD)
                 if batch_min_date is not None:
                     cur.execute(
-                        'UPDATE "__table_stats__" SET min_date = CASE WHEN min_date IS NULL OR ? < min_date THEN ? '
-                        "ELSE min_date END, updated_utc = CURRENT_TIMESTAMP WHERE table_name = ?",
+                        'UPDATE "__table_stats__" SET '
+                        "min_date = CASE WHEN min_date IS NULL OR ? < min_date THEN ? ELSE min_date END, "
+                        "updated_utc = CURRENT_TIMESTAMP WHERE table_name = ?",
                         (batch_min_date, batch_min_date, table_name),
                     )
                 if batch_max_date is not None:
                     cur.execute(
-                        'UPDATE "__table_stats__" SET max_date = CASE WHEN max_date IS NULL OR ? > max_date THEN ? '
-                        "ELSE max_date END, updated_utc = CURRENT_TIMESTAMP WHERE table_name = ?",
+                        'UPDATE "__table_stats__" SET '
+                        "max_date = CASE WHEN max_date IS NULL OR ? > max_date THEN ? ELSE max_date END, "
+                        "updated_utc = CURRENT_TIMESTAMP WHERE table_name = ?",
                         (batch_max_date, batch_max_date, table_name),
                     )
                 conn.commit()
@@ -431,200 +552,241 @@ class SQLiteWriter:
             conn.rollback()
             raise
 
-        self.close()
+        # __interval_stats__: apply O(1) updates once per batch
+        try:
+            if track_intervals and interval_tally:
+                conn.execute("BEGIN IMMEDIATE")
+                for iv, s in interval_tally.items():
+                    # Ensure row exists
+                    cur.execute(
+                        'INSERT OR IGNORE INTO "__interval_stats__"(table_name, interval) VALUES (?, ?)',
+                        (table_name, iv),
+                    )
+
+                    # Increment count
+                    if s["count"] > 0:
+                        cur.execute(
+                            'UPDATE "__interval_stats__" SET '
+                            "row_count = row_count + ?, "
+                            "updated_utc = CURRENT_TIMESTAMP "
+                            "WHERE table_name = ? AND interval = ?",
+                            (s["count"], table_name, iv),
+                        )
+
+                    # Merge numeric timestamp bounds (intraday)
+                    if s["min_ts"] is not None:
+                        cur.execute(
+                            'UPDATE "__interval_stats__" SET '
+                            "min_timestamp_utc_s = CASE "
+                            "  WHEN min_timestamp_utc_s IS NULL OR ? < min_timestamp_utc_s THEN ? "
+                            "  ELSE min_timestamp_utc_s END, "
+                            "updated_utc = CURRENT_TIMESTAMP "
+                            "WHERE table_name = ? AND interval = ?",
+                            (s["min_ts"], s["min_ts"], table_name, iv),
+                        )
+                    if s["max_ts"] is not None:
+                        cur.execute(
+                            'UPDATE "__interval_stats__" SET '
+                            "max_timestamp_utc_s = CASE "
+                            "  WHEN max_timestamp_utc_s IS NULL OR ? > max_timestamp_utc_s THEN ? "
+                            "  ELSE max_timestamp_utc_s END, "
+                            "updated_utc = CURRENT_TIMESTAMP "
+                            "WHERE table_name = ? AND interval = ?",
+                            (s["max_ts"], s["max_ts"], table_name, iv),
+                        )
+
+                    # Merge date bounds (interday)
+                    if s["min_date"] is not None:
+                        cur.execute(
+                            'UPDATE "__interval_stats__" SET '
+                            "min_date = CASE "
+                            "  WHEN min_date IS NULL OR ? < min_date THEN ? "
+                            "  ELSE min_date END, "
+                            "updated_utc = CURRENT_TIMESTAMP "
+                            "WHERE table_name = ? AND interval = ?",
+                            (s["min_date"], s["min_date"], table_name, iv),
+                        )
+                    if s["max_date"] is not None:
+                        cur.execute(
+                            'UPDATE "__interval_stats__" SET '
+                            "max_date = CASE "
+                            "  WHEN max_date IS NULL OR ? > max_date THEN ? "
+                            "  ELSE max_date END, "
+                            "updated_utc = CURRENT_TIMESTAMP "
+                            "WHERE table_name = ? AND interval = ?",
+                            (s["max_date"], s["max_date"], table_name, iv),
+                        )
+
+                conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
         return ok_ids
 
-    def close(self, *, try_cleanup: bool = False) -> None:
+    def close(self) -> None:
         """
-        Close the current connection. If try_cleanup=True, and there are no active readers,
-        flip to DELETE mode and remove -wal/-shm for a clean directory.
+        Close cursor/connection. If `clean` and this was opened for writing,
+        attempt to checkpoint WAL and switch to DELETE to remove -wal/-shm.
         """
-        conn = self._conn
-        db_path = self._open_for[0] if self._open_for else None
-
-        def _no_readers(c: sqlite3.Connection) -> bool:
-            try:
-                c.execute("PRAGMA busy_timeout=0")  # non-blocking probe
-                c.execute("BEGIN EXCLUSIVE")
-                c.execute("ROLLBACK")
-                return True
-            except sqlite3.OperationalError:
-                return False
-            finally:
+        try:
+            if self._conn is not None:
+                # If not autocommit, ensure all writes are flushed
                 try:
-                    c.execute("PRAGMA busy_timeout=5000")
+                    self._conn.commit()
                 except Exception:
                     pass
 
-        if conn is not None:
-            try:
-                # 1) Checkpoint and try to shrink WAL
+                # Try a bounded retry on TRUNCATE checkpoint
                 busy = 1
-                try:
-                    busy, log, ckpt = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-                except Exception:
-                    logger.debug("wal_checkpoint(TRUNCATE) failed or unavailable", exc_info=True)
-
-                # 2) Optional cleanup only if no readers blocked the checkpoint
-                if try_cleanup and busy == 0 and _no_readers(conn):
+                for _ in range(3):
                     try:
-                        mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0].lower()
-                        if mode == "delete" and db_path:
-                            for suf in ("-wal", "-shm"):
-                                p = Path(str(db_path) + suf)
-                                try:
-                                    p.unlink()
-                                except FileNotFoundError:
-                                    pass
-                                except Exception:
-                                    logger.debug("Could not remove %s", p, exc_info=True)
+                        row = self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE);").fetchone()
+                        busy = 0 if not row else int(row[0])
                     except Exception:
-                        logger.debug("Cleanup skipped; likely readers present", exc_info=True)
-            finally:
-                try:
-                    if self._cursor:
-                        self._cursor.close()
-                finally:
+                        busy = 0
+                    if busy == 0:
+                        break
+
+                # If still busy, do a passive checkpoint to merge what we can
+                if busy:
                     try:
-                        conn.close()
+                        self._conn.execute("PRAGMA wal_checkpoint(PASSIVE);")
                     except Exception:
                         pass
 
-        # Clear internal state regardless
-        self._cursor = None
-        self._conn = None
-        self._open_for = None
+                # Try to switch to DELETE so -wal/-shm are removed when nobody else is attached
+                try:
+                    self._conn.execute("PRAGMA journal_mode=DELETE;")
+                except Exception:
+                    # If other readers remain, this can fail; not fatal.
+                    pass
+        finally:
+            # Close cursor/connection unconditionally
+            if self._cursor is not None:
+                try:
+                    self._cursor.close()
+                except Exception:
+                    pass
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+            self._cursor = None
+            self._conn = None
+            self._open_for = None
 
 
 class SQLiteReader:
     def __init__(self, ts_col: str, busy_timeout_ms: int = 5000):
         self.ts_col = ts_col
         self.busy_timeout_ms = busy_timeout_ms
+        self._conn: sqlite3.Connection | None = None
+        self._cursor: sqlite3.Cursor | None = None
 
     def read_dt_range(
         self, db_files: list[Path], table: str, interval: str | None, start: str | int, end: str | int
-    ) -> pd.DataFrame:
+    ) -> list[dict]:
         """
         Return all 1m rows for table between [start, end] (inclusive) across the given files.
-        Skips missing/empty files gracefully. Returns a single DataFrame sorted by timestamp.
+        Skips missing/empty files gracefully. Returns a single list of dicts sorted by datetime.
         """
-        rows: list[pd.DataFrame] = []
-
+        out: list[dict] = []
         for db in db_files:
             if not Path(db).exists():
                 continue
 
             try:
-                with self._connect_ro(db) as conn:
-                    if not self._table_exists(conn, table):
-                        continue
+                self._connect_ro(db)
 
-                    if not self._has_any_in_range(conn, table, interval, start, end):
-                        continue
+                if self._conn is None:
+                    raise
 
-                    df = self._query_range(conn, table, interval, start, end)
-                    if not df.empty:
-                        rows.append(df)
+                if not self._table_exists(table):
+                    continue
+
+                if not self._has_any_in_range(table, interval, start, end):
+                    continue
+
+                rows = self._query_range(table, interval, start, end) or []
+                out.extend(rows)
 
             except sqlite3.Error as e:
-                raise e
+                logger.warning("SQLite error reading %s: %s", db, e)
+                continue
+
+        self.close()
 
         if not rows:
-            return pd.DataFrame()
+            return []
 
-        out = pd.concat(rows, ignore_index=True)
-
-        out = out.sort_values(self.ts_col)
-        out = out.reset_index(drop=True)
+        out.sort(key=lambda r: r[self.ts_col])
         return out
 
-    # ---------- helpers ----------
-
-    def _connect_ro(self, db_path: Path) -> sqlite3.Connection:
+    def _connect_ro(self, db_path: Path):
         """
         Open read-only with WAL-friendly pragmas.
         Using URI with mode=ro ensures we don’t interfere with the writer.
         """
-        uri = f"file:{Path(db_path).as_posix()}?mode=ro"
-        conn = sqlite3.connect(uri, uri=True, isolation_level=None)  # autocommit-ish for reads
+        # read-only, don’t attempt to write WAL files
+        uri = f"file:{str(db_path)}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        # Pragmas that help co-exist with a writer using WAL
-        conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms};")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-        return conn
+        conn.execute("PRAGMA query_only=ON;")
+        self._conn = conn
 
-    def _table_exists(self, conn: sqlite3.Connection, table: str) -> bool:
+    def _table_exists(self, table: str) -> bool:
         q = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;"
-        cur = conn.execute(q, (table,))
+        if self._conn is not None:
+            cur = self._conn.execute(q, (table,))
         return cur.fetchone() is not None
 
-    def _has_any_in_range(
-        self, conn: sqlite3.Connection, table: str, interval: str | None, start: str | int, end: str | int
-    ) -> bool:
-        if interval and self._col_exists(conn, table, "interval"):
+    def _has_any_in_range(self, table: str, interval: str | None, start: str | int, end: str | int) -> bool:
+        if interval and self._col_exists(table, "interval"):
             q = f'SELECT 1 FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ? AND interval=? LIMIT 1;'
-            cur = conn.execute(q, (start, end, interval))
+            if self._conn is not None:
+                cur = self._conn.execute(q, (start, end, interval))
         else:
             q = f'SELECT 1 FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ? LIMIT 1;'
-            cur = conn.execute(q, (start, end))
+            if self._conn is not None:
+                cur = self._conn.execute(q, (start, end))
         return cur.fetchone() is not None
 
-    def _query_range(
-        self, conn: sqlite3.Connection, table: str, interval: str | None, start: str | int, end: str | int
-    ) -> pd.DataFrame:
-        if interval and self._col_exists(conn, table, "interval"):
+    def _query_range(self, table: str, interval: str | None, start: str | int, end: str | int) -> list[dict]:
+        if interval and self._col_exists(table, "interval"):
             q = f'SELECT * FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ? AND interval=?;'
-            cur = conn.execute(q, (start, end, interval))
+            if self._conn is not None:
+                cur = self._conn.execute(q, (start, end, interval))
         else:
             q = f'SELECT * FROM "{table}" WHERE {self.ts_col} BETWEEN ? AND ?;'
-            cur = conn.execute(q, (start, end))
-        return pd.DataFrame([dict(row) for row in cur.fetchall()])
+            if self._conn is not None:
+                cur = self._conn.execute(q, (start, end))
+        return [dict(row) for row in cur.fetchall()]
 
-    def _col_exists(self, conn: sqlite3.Connection, table: str, col: str) -> bool:
+    def _col_exists(self, table: str, col: str) -> bool:
         q = f'PRAGMA table_info("{table}");'
-        cols = {r["name"] for r in conn.execute(q)}
+        if self._conn is not None:
+            cols = {r["name"] for r in self._conn.execute(q)}
         return col in cols
 
-    # def list_tables(self, db_path: Path) -> list[str]:
-    #     self._connect(db_path)
-    #     self._cursor.execute(
-    #         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
-    #     )
-    #     return [row["name"] for row in self._cursor.fetchall()]
-
-    # def fetch_all(self, db_path: Path, table_name: str) -> list[dict[str, Any]]:
-    #     self._connect(db_path)
-    #     q = f'SELECT * FROM "{table_name}"'
-    #     self._cursor.execute(q)
-    #     return [dict(row) for row in self._cursor.fetchall()]
-
-    # def fetch_where(
-    #     self, db_path: Path, table_name: str, where_clause: str, params: Optional[list[Any]] = None
-    # ) -> list[dict[str, Any]]:
-    #     self._connect(db_path)
-    #     q = f'SELECT * FROM "{table_name}" WHERE {where_clause}'
-    #     self._cursor.execute(q, params or [])
-    #     return [dict(row) for row in self._cursor.fetchall()]
-
-    # def fetch_columns(
-    #     self, db_path: Path, table_name: str, columns: list[str], limit: Optional[int] = None
-    # ) -> list[dict[str, Any]]:
-    #     self._connect(db_path)
-    #     col_str = ", ".join(f'"{c}"' for c in columns)
-    #     q = f"SELECT {col_str} FROM \"{table_name}\""
-    #     if limit:
-    #         q += f" LIMIT {limit}"
-    #     self._cursor.execute(q)
-    #     return [dict(row) for row in self._cursor.fetchall()]
-
-    # def fetch_metadata(self, db_path: Path) -> list[dict[str, Any]]:
-    #     return self.fetch_all(db_path, "stream_metadata")
-
-    # def execute_raw_query(
-    #     self, db_path: Path, sql: str, params: Optional[list[Any]] = None
-    # ) -> list[dict[str, Any]]:
-    #     self._connect(db_path)
-    #     self._cursor.execute(sql, params or [])
-    #     return [dict(row) for row in self._cursor.fetchall()]
+    def close(self) -> None:
+        """
+        Close cursor/connection for a read-only session.
+        Readers should never try to checkpoint WAL or change journal_mode.
+        """
+        try:
+            if self._cursor is not None:
+                try:
+                    self._cursor.close()
+                except Exception:
+                    pass
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+        finally:
+            self._cursor = None
+            self._conn = None

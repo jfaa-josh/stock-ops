@@ -16,7 +16,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-os.environ["TEST_MODE"] = "1"
+os.environ["TEST_WRITER"] = "1"
 
 # Same inputs as docker compose
 os.environ["BUFFER_STREAM"] = "buf:ingest"

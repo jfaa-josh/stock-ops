@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -8,7 +9,7 @@ import requests
 from stockops.config import config, eodhd_config
 from stockops.data.database.write_buffer import emit
 from stockops.data.transform import TransformData
-from stockops.data.utils import tzstr_to_utcts, utcts_to_tzstr_parsed, validate_isodatestr
+from stockops.data.utils import get_db_filename_for_date, tzstr_to_utcts, validate_isodatestr
 
 from .base_historical_service import AbstractHistoricalService
 
@@ -22,56 +23,58 @@ class EODHDHistoricalService(AbstractHistoricalService):
     def __init__(self):
         pass
 
-    def make_db_filepath(self, data_type: str, exchange: str, year_str: str = "", month_str: str = "") -> Path:
+    def write_data(self, data_type: str, table_name: str, exchange: str, transformed_row: dict, test_mode: bool):
+        transformer_data_type = f"historical_{data_type}"
         if data_type == "interday":
-            filename = f"historical_{data_type}_EODHD_{exchange}.db"
+            entry_datetime = None
         elif data_type == "intraday":
-            filename = f"historical_{data_type}_EODHD_{exchange}_{year_str}_{month_str}.db"
+            entry_datetime = transformed_row["timestamp_UTC_s"]
 
-        return config.RAW_HISTORICAL_DIR / filename
+        filename = get_db_filename_for_date(transformer_data_type, self.tz, "EODHD", exchange, entry_datetime)
+        db_path = Path(config.RAW_HISTORICAL_DIR) / str(filename)
 
-    def write_data(self, data_type: str, table_name: str, exchange: str, transformed_row: dict):
-        if data_type == "interday":
-            db_path = self.make_db_filepath(data_type, exchange)
-        elif data_type == "intraday":
-            yr_str, mo_str, _ = utcts_to_tzstr_parsed(transformed_row["timestamp_UTC_s"], self.tz)
-            db_path = self.make_db_filepath(data_type, exchange, yr_str, mo_str)
+        if test_mode:
+            print({"db_path": db_path, "table": table_name, "row": transformed_row})
+        else:
+            emit({"db_path": db_path, "table": table_name, "row": transformed_row})
 
-        emit({"db_path": db_path, "table": table_name, "row": transformed_row})
-
-    def _fetch_data(self, ws_url: str, data_type: str, exchange: str, table_name: str, interval: str):
+    def _fetch_data(self, ws_url: str, data_type: str, exchange: str, ticker: str, interval: str, test_mode: bool):
         transform = TransformData("EODHD", f"historical_{data_type}", "to_db_writer", exchange)
+        table_name = ticker
 
         try:
             resp = requests.get(ws_url, timeout=30)
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
-            logger.warning("[%s] HTTP error fetching %s: %s", table_name, ws_url, e)
+            logger.warning("[%s] HTTP error fetching %s: %s", f"{ticker}.{exchange}", ws_url, e)
             return
 
         if isinstance(data, list):
             for row in data:
-                logger.debug("[%s] Received data: %s", table_name, row)
+                logger.debug("[%s] Received data: %s", f"{ticker}.{exchange}", row)
                 transformed_row = transform(row, interval)
 
-                self.write_data(data_type, table_name, exchange, transformed_row)
+                self.write_data(data_type, table_name, exchange, transformed_row, test_mode)
         elif isinstance(data, dict):
-            logger.debug("[%s] Received data: %s", table_name, data)
+            logger.debug("[%s] Received data: %s", f"{ticker}.{exchange}", data)
             transformed_row = transform(data, interval)
 
-            self.write_data(data_type, table_name, exchange, transformed_row)
+            self.write_data(data_type, table_name, exchange, transformed_row, test_mode)
         else:
-            logger.error("[%s] Unexpected data format: %s", table_name, type(data).__name__)
+            logger.error("[%s] Unexpected data format: %s", f"{ticker}.{exchange}", type(data).__name__)
 
     def start_historical_task(self, command: dict):
+        TEST_SERVICES = os.getenv("TEST_SERVICES", "0") == "1"
+
         required_keys = ["ticker", "exchange", "interval", "start", "end"]
         for key in required_keys:
             if key not in command:
                 raise ValueError(f"Missing required key: {key}")
 
         exchange = command["exchange"]
-        ticker = f"{command['ticker']}.{exchange}"
+        ticker = command["ticker"]
+        ticker_exch = f"{ticker}.{exchange}"
         interval = command["interval"]
         api_token = eodhd_config.EODHD_API_TOKEN
 
@@ -83,7 +86,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
             start = str(tzstr_to_utcts(command["start"], "%Y-%m-%d %H:%M", self.tz))
             end = str(tzstr_to_utcts(command["end"], "%Y-%m-%d %H:%M", self.tz))
             url = (
-                f"https://eodhd.com/api/intraday/{ticker}?api_token={api_token}"
+                f"https://eodhd.com/api/intraday/{ticker_exch}?api_token={api_token}"
                 f"&interval={interval}&from={start}&to={end}&fmt=json"
             )
 
@@ -93,13 +96,13 @@ class EODHDHistoricalService(AbstractHistoricalService):
             end = validate_isodatestr(command["end"])
 
             url = (
-                f"https://eodhd.com/api/eod/{ticker}?api_token={api_token}"
+                f"https://eodhd.com/api/eod/{ticker_exch}?api_token={api_token}"
                 f"&period={interval}&from={start}&to={end}&fmt=json"
             )
 
         else:
             raise ValueError(f"Unknown interval type: {interval}")
 
-        logger.info("Prepared historical task: type=%s ticker=%s interval=%s", data_type, ticker, interval)
+        logger.info("Prepared historical task: type=%s ticker=%s interval=%s", data_type, ticker_exch, interval)
 
-        self._fetch_data(url, data_type, exchange, ticker, interval)
+        self._fetch_data(url, data_type, exchange, ticker, interval, TEST_SERVICES)

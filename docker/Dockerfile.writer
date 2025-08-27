@@ -22,6 +22,7 @@ RUN python3 scripts/install_writer_deps.py
 # Copy the stockops subpackage bits
 COPY src/stockops/config/     ./src/stockops/config/
 COPY src/stockops/data/database/     ./src/stockops/data/database/
+COPY src/stockops/data/utils.py     ./src/stockops/data/utils.py
 
 # Create a dummy __init__.py file to make stockops a package for partial copy to work
 RUN mkdir -p ./src/stockops && :> ./src/stockops/__init__.py

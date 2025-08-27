@@ -1,138 +1,28 @@
-from zoneinfo import ZoneInfo
-from typing import List, Tuple, Sequence
 import pandas as pd
-from pathlib import Path
 import matplotlib.pyplot as plt
 
-from stockops.data.database.sql_db import SQLiteReader
-# from stockops.data.transform import TransformData
-from stockops.data.utils import tzstr_to_utcts, validate_isodatestr, validate_utc_ts, period_from_unix, normalize_ts_to_seconds, utcts_to_tzstr
-from stockops.config import config, utils as cfg_utils
-
-
-def get_df(provider, data_type, exchange, ticker, interval, start_in, end_in):
-    def convert_to_table_ts(datestr: str, tz: ZoneInfo, precision: str = 's') -> int:
-        if data_type == "historical_intraday":
-            ts = tzstr_to_utcts(datestr, "%Y-%m-%d %H:%M", tz)
-        elif data_type == "streaming":
-            ts_s = tzstr_to_utcts(datestr, "%Y-%m-%d %H:%M", tz)
-            ts = ts_s * 1000
-        return validate_utc_ts(ts, precision)
-
-    def get_filenames(filename_dates: Sequence[Tuple[str, ...]] | None, data_type: str,
-                    provider: str, exchange: str) -> List[str]:
-        if data_type == "historical_interday":
-            return [f"{data_type}_{provider}_{exchange}.db"]
-
-        elif data_type == "historical_intraday" and filename_dates is not None:
-            return [f"{data_type}_{provider}_{exchange}_{y}_{m}.db" for (y, m) in filename_dates]
-
-        elif data_type == "streaming" and filename_dates is not None:
-            return [f"{data_type}_{provider}_{exchange}_{y}_{m}_{d}.db" for (y, m, d) in filename_dates]
-
-        raise ValueError(f"Unsupported data_type: {data_type!r}")
-
-    if provider == "EODHD":
-        cfg = cfg_utils.ProviderConfig(provider, exchange)
-        tz = ZoneInfo(cfg.tz_str)
-
-        root = config.RAW_HISTORICAL_DIR
-        if data_type == "historical_interday":
-            ts_col = "date"
-            start = validate_isodatestr(start_in)
-            end = validate_isodatestr(end_in)
-            filename_dates = None
-        elif data_type == "historical_intraday":
-            ts_col = "timestamp_UTC_s"
-            start = convert_to_table_ts(start_in, tz)
-            end = convert_to_table_ts(end_in, tz)
-            filename_dates = period_from_unix(start, end, tz, precision = 'mo')
-        elif data_type == "streaming":
-            root = config.RAW_STREAMING_DIR
-            ts_col = "timestamp_UTC_ms"
-            start = convert_to_table_ts(start_in, tz, precision = 'ms')
-            end = convert_to_table_ts(end_in, tz, precision = 'ms')
-            filename_dates = period_from_unix(start, end, tz, precision = 'day')
-
-    filenames = get_filenames(filename_dates, data_type, provider, exchange)
-    db_files = [Path(root) / str(file) for file in filenames]
-
-    reader = SQLiteReader(ts_col)
-
-    # FIX THIS ONCE I FIX TABLE NAMING SO THAT IN ALL CASES TABLE IS JUST TICKER NOT TICKER.EXCHANGE!!!!#########
-    table = ticker
-    if data_type != "streaming": table = f'{ticker}.{exchange}'
-    #############################################################################################################
-
-    df = reader.read_dt_range(db_files, table, interval, start, end)
-
-    ### DELETE THESE AFTER I FIX SQL_DB BUGS: ######################################################
-    has_interval = 'interval' in df.columns
-    cols_to_consider = [c for c in df.columns if c not in ('msg_id', 'interval')]
-
-    primary_sort = cols_to_consider.copy()
-    if has_interval:
-        primary_sort.append('interval')
-    if 'msg_id' in df.columns:
-        primary_sort.append('msg_id')
-
-    df_dedup = df.sort_values(primary_sort, kind='mergesort')
-    df_dedup = df_dedup.drop_duplicates(subset=cols_to_consider, keep='first').reset_index(drop=True)
-    if 'msg_id' in df_dedup.columns:
-        major_minor = df_dedup['msg_id'].astype(str).str.split('-', n=1, expand=True)
-        df_dedup['_msg_major'] = pd.to_numeric(major_minor[0], errors='coerce').fillna(-1)
-        df_dedup['_msg_minor'] = pd.to_numeric(major_minor[1], errors='coerce').fillna(-1)
-    else:
-        df_dedup['_msg_major'] = -1
-        df_dedup['_msg_minor'] = -1
-
-    sort_keys = [ts_col] + (['interval'] if has_interval else []) + ['_msg_major', '_msg_minor']
-    df_dedup = df_dedup.sort_values(sort_keys, kind='mergesort')
-
-    gb_keys = [ts_col] + (['interval'] if has_interval else [])
-    df_dedup['version'] = (df_dedup.groupby(gb_keys).cumcount() + 1).astype('int64')
-
-    df_dedup = df_dedup.sort_index(kind='mergesort')
-    df_dedup = df_dedup.drop(columns=['_msg_major', '_msg_minor'])
-
-    df = df_dedup.copy()
-    print(df.head())
-    ###################################################################################################
-
-    ### DELETE THESE AFTER I FINISH XFORMER: ####
-    # transformer = TransformData(provider, data_type, "from_db_reader", exchange)
-    # if df[''].apply()
-    def conf_date(ts): ##!!!!!ADD THIS TO XFOMER!
-        n_ts = normalize_ts_to_seconds(int(ts))
-        if data_type == "historical_intraday":
-            return utcts_to_tzstr(n_ts, "%Y-%m-%d %H:%M", tz)
-        elif data_type == "streaming":
-            return utcts_to_tzstr(n_ts, "%Y-%m-%d %H:%M:%S.%f", tz)
-
-    if data_type != "historical_interday":
-        df[ts_col] = df[ts_col].apply(conf_date)
-        df = df.rename(columns={ts_col: "date"})
-    #############################################
-
-    return df
+from stockops.data.database.reader import ReadProcess
 
 # Static
 provider = "EODHD"
 exchange = "US"
 
-
+def run(provider, data_type, exchange, ticker, interval, start_date, end_date):
+    reader = ReadProcess(provider, data_type, exchange)
+    data = reader.read_sql(ticker, interval, start_date, end_date)
+    return reader.get_df(data)
 
 # DAILY:
 data_type = "historical_interday"
 
-start_in = '2025-07-25'
-end_in = '2025-08-21'
+start_date = '2025-07-25'
+end_date = '2025-08-21'
 
 ticker = 'SPY'
 interval = 'd'
 
 #### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
-df_day = get_df(provider, data_type, exchange, ticker, interval, start_in, end_in)
+df_day = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
 
 ### DELETE THESE AFTER I FIX SQL_DB BUGS: ###
@@ -145,42 +35,42 @@ print(df_day.head())
 # HOURLY:
 data_type = "historical_intraday"
 
-start_in = '2025-08-02 09:30'
-end_in = '2025-09-21 16:00'
+start_date = '2025-08-02 09:30'
+end_date = '2025-09-21 16:00'
 
 ticker = 'SPY'
 interval = '1h'
 
 #### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
-df_hr = get_df(provider, data_type, exchange, ticker, interval, start_in, end_in)
+df_hr = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
 print(df_hr.head())
 
 # Minutely:
 data_type = "historical_intraday"
 
-start_in = '2025-08-02 09:30'
-end_in = '2025-09-21 16:00'
+start_date = '2025-08-02 09:30'
+end_date = '2025-09-21 16:00'
 
 ticker = 'SPY'
 interval = '1m'
 
 #### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
-df_min = get_df(provider, data_type, exchange, ticker, interval, start_in, end_in)
+df_min = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
 print(df_min.head())
 
 # Streaming:
 data_type = "streaming"
 
-start_in = '2025-08-02 09:30'
-end_in = '2025-09-21 16:00'
+start_date = '2025-08-02 09:30'
+end_date = '2025-09-21 16:00'
 
 ticker = 'SPY'
 interval = None
 
 #### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
-df_stream = get_df(provider, data_type, exchange, ticker, interval, start_in, end_in)
+df_stream = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
 print(df_stream.head())
 
