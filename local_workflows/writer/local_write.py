@@ -3,8 +3,10 @@ from pathlib import Path
 from typing import Tuple, Dict, Any
 import logging
 
-from stockops.data.database import writer as writer_mod
-from stockops.data.database.write_buffer import emit
+def import_locals(): # Do this here so that I can first set env vars
+    from stockops.data.database import writer as writer_mod
+    from stockops.data.database.write_buffer import emit
+    return writer_mod, emit
 
 
 # Logging setup
@@ -20,9 +22,11 @@ os.environ["TEST_WRITER"] = "1"
 
 # Same inputs as docker compose
 os.environ["BUFFER_STREAM"] = "buf:ingest"
-os.environ["BUFFER_BATCH"] = "50"
+os.environ["BUFFER_BATCH"] = "500"
 os.environ["BUFFER_BLOCK_MS"] = "10000"
 os.environ["BUFFER_TRIM_MAXLEN"] = "100000"
+
+writer_mod, emit = import_locals()
 
 # Start the writer in background
 t = threading.Thread(target=writer_mod.main, daemon=True)

@@ -122,15 +122,6 @@ class Section:
                 return uid
 
     def run_deployment(self, cfg) -> Tuple[str, str]:
-        if self.mode == "stream":
-            try:
-                duration_int = int(cfg.get("duration","").strip())
-                if duration_int <= 0:
-                    raise ValueError
-            except Exception:
-                st.error("Duration must be a positive integer.")
-                raise ValueError("Duration must be a positive integer.")
-
         fr_id, fr_name = self.svc.trigger_flow(cfg)
 
         st.success(f"Flow triggered: {fr_name}")
@@ -511,25 +502,25 @@ class Section:
                     key=f"{self.ns}_stream_type",
                 )
                 duration_text = st.text_input(
-                    "Duration (seconds)",
-                    value="60",
+                    "Duration (hours)",
+                    value="1.0",
                     key=f"{self.ns}_duration_text",
-                    help="Enter an integer number of seconds"
+                    help="Enter a decimal number of hours"
                 )
 
                 # Optional validation preview
                 try:
-                    duration_int = int(duration_text.strip())
-                    valid_duration = duration_int > 0
+                    duration_float = float(duration_text.strip())
+                    valid_duration = duration_float > 0
                 except Exception:
-                    duration_int = None
+                    duration_float = None
                     valid_duration = False
 
                 use_sched, sched_payload = (self._render_schedule_editor(new_exchange) or (False, None))
 
                 if st.button("Add configuration", key=f"{self.ns}_add_cfg_btn"):
                     if not all([new_ticker.strip(), new_exchange.strip(), valid_duration, stream_type.strip()]):
-                        st.error("Please fill in ticker, exchange, a positive integer duration, and stream type.")
+                        st.error("Please fill in ticker, exchange, a positive float duration, and integer stream type.")
                     else:
                         unique_id = self.unique_suffix()
                         cfg = {
@@ -725,7 +716,7 @@ class Section:
                         )
                     else:
                         st.markdown(
-                            f"{cfg['ticker']}.{cfg['exchange']} | stream={cfg['stream_type']} | duration={cfg['duration']}s"
+                            f"{cfg['ticker']}.{cfg['exchange']} | stream={cfg['stream_type']} | duration={cfg['duration']}hr"
                         )
 
             st.divider()

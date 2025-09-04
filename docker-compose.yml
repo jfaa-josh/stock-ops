@@ -50,7 +50,8 @@ services:
       retries: 5                                      # Number of retries before marking unhealthy
 
   sqlitebrowser:
-    image: lscr.io/linuxserver/sqlitebrowser:latest   # LinuxServer.io's maintained image for DB Browser for SQLite
+    # image: lscr.io/linuxserver/sqlitebrowser:latest   # LinuxServer.io's maintained image for DB Browser for SQLite
+    image: docker.io/linuxserver/sqlitebrowser:version-3.13.1-r0
     attach: false                                     # Cuts out mindless logging chatter
     container_name: sqlitebrowser                     # Name shown in `docker ps` for easy reference
     depends_on:

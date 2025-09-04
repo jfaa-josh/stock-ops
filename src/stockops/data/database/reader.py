@@ -53,17 +53,10 @@ class ReadProcess:
         filenames = get_filenames_for_dates(self.data_type, self.tz, self.provider, self.exchange, (start, end))
         db_files = [Path(root) / str(file) for file in filenames]
 
-        # FIX THIS ONCE I FIX TABLE NAMING SO THAT IN ALL CASES TABLE IS JUST TICKER NOT TICKER.EXCHANGE!!!!#########
-        # THIS IS DONE CAN DELETE ONCE I HAVE NEW .DB
-        table = ticker
-        if self.data_type != "streaming":
-            table = f"{ticker}.{self.exchange}"
-        #############################################################################################################
-
         self.ts_col = set_ts_col(self.provider, self.data_type)
         sql_reader = SQLiteReader(self.ts_col)
 
-        rows: list[dict] = sql_reader.read_dt_range(db_files, table, interval, start, end)
+        rows: list[dict] = sql_reader.read_dt_range(db_files, ticker, interval, start, end)
 
         return rows
 
@@ -85,38 +78,5 @@ class ReadProcess:
         if not hasattr(self, "ts_col"):
             set_ts_col(self.provider, self.data_type)
         df = set_index(df)
-
-        ### DELETE THESE AFTER I FIX SQL_DB BUGS: ######################################################
-        has_interval = "interval" in df.columns
-        cols_to_consider = [c for c in df.columns if c not in ("msg_id", "interval")]
-
-        primary_sort = cols_to_consider.copy()
-        if has_interval:
-            primary_sort.append("interval")
-        if "msg_id" in df.columns:
-            primary_sort.append("msg_id")
-
-        df_dedup = df.sort_values(primary_sort, kind="mergesort")
-        df_dedup = df_dedup.drop_duplicates(subset=cols_to_consider, keep="first").reset_index(drop=True)
-        if "msg_id" in df_dedup.columns:
-            major_minor = df_dedup["msg_id"].astype(str).str.split("-", n=1, expand=True)
-            df_dedup["_msg_major"] = pd.to_numeric(major_minor[0], errors="coerce").fillna(-1)
-            df_dedup["_msg_minor"] = pd.to_numeric(major_minor[1], errors="coerce").fillna(-1)
-        else:
-            df_dedup["_msg_major"] = -1
-            df_dedup["_msg_minor"] = -1
-
-        sort_keys = [self.ts_col] + (["interval"] if has_interval else []) + ["_msg_major", "_msg_minor"]
-        df_dedup = df_dedup.sort_values(sort_keys, kind="mergesort")
-
-        gb_keys = [self.ts_col] + (["interval"] if has_interval else [])
-        df_dedup["version"] = (df_dedup.groupby(gb_keys).cumcount() + 1).astype("int64")
-
-        df_dedup = df_dedup.sort_index(kind="mergesort")
-        df_dedup = df_dedup.drop(columns=["_msg_major", "_msg_minor"])
-
-        df = df_dedup.copy()
-        print(df.head())
-        ###################################################################################################
 
         return df

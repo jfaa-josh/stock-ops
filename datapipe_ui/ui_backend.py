@@ -34,7 +34,7 @@ class DeploymentService:
         elif self.mode == "stream":
             return {
                 "tickers": cfg["ticker"], "exchange": cfg["exchange"],
-                "stream_type": cfg["stream_type"], "duration": int(cfg["duration"]),
+                "stream_type": cfg["stream_type"], "duration": float(cfg["duration"])*3600,
             }
         else:
             raise ValueError(f"Unsupported mode: {self.mode}")

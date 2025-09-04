@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import subprocess
 
 from stockops.data.database.reader import ReadProcess
 
@@ -12,10 +13,51 @@ def run(provider, data_type, exchange, ticker, interval, start_date, end_date):
     data = reader.read_sql(ticker, interval, start_date, end_date)
     return reader.get_df(data)
 
+# Command to run inside WSL TO copy database
+############################################
+# cmd = [
+#     "wsl", "docker", "cp",
+#     "stockops-writer-service-1:/app/data/raw",
+#     "./data/git_lfs"
+# ]
+
+# subprocess.run(cmd, check=True)
+############################################
+
+
+
+#### I THINK ITS PRETTY CLEAR HERE I NEED A FUNCTION TO RETURN AVAIL DATES/INTERVALS/TABLES IN HUMAN READABLE FORMAT!!!
+###OK HERE IS THE PROBLEM WITHT HIS CODE, THAT I MIGHT CHOOSE TO PUT INTO READER AND I MIGHT NOT:
+# I instance reader with a date range due to file names...so how do I first know exactly what I want from table stats??
+# import sqlite3
+# db_path = "path/to/your/database.db"
+
+# # Connect to the database
+# conn = sqlite3.connect(db_path)
+
+# # Create a cursor
+# cursor = conn.cursor()
+
+# # Example: select first 10 rows from __interval_stats__
+# cursor.execute("SELECT * FROM __interval_stats__ LIMIT 10;")
+# rows = cursor.fetchall()
+
+# for row in rows:
+#     print(row)
+
+# # Close when finished
+# conn.close()
+###################################################################################################################
+
+
+
+
+
+
 # DAILY:
 data_type = "historical_interday"
 
-start_date = '2025-07-25'
+start_date = '2025-07-01'
 end_date = '2025-08-21'
 
 ticker = 'SPY'
@@ -24,41 +66,31 @@ interval = 'd'
 #### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
 df_day = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
-
-### DELETE THESE AFTER I FIX SQL_DB BUGS: ###
-
-df_day = df_day[df_day['version'].isin([1, 2])]
-df_day = df_day.reset_index(drop=True)
-print(df_day.head())
-#############################################
-
 # HOURLY:
 data_type = "historical_intraday"
 
-start_date = '2025-08-02 09:30'
+start_date = '2025-07-01 09:30'
 end_date = '2025-09-21 16:00'
 
 ticker = 'SPY'
 interval = '1h'
 
-#### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
 df_hr = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
 print(df_hr.head())
 
-# Minutely:
-data_type = "historical_intraday"
+# # Minutely:
+# data_type = "historical_intraday"
 
-start_date = '2025-08-02 09:30'
-end_date = '2025-09-21 16:00'
+# start_date = '2025-08-02 09:30'
+# end_date = '2025-09-21 16:00'
 
-ticker = 'SPY'
-interval = '1m'
+# ticker = 'SPY'
+# interval = '1m'
 
-#### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
-df_min = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
+# df_min = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
-print(df_min.head())
+# print(df_min.head())
 
 # Streaming:
 data_type = "streaming"
@@ -69,7 +101,6 @@ end_date = '2025-09-21 16:00'
 ticker = 'SPY'
 interval = None
 
-#### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
 df_stream = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
 
 print(df_stream.head())
@@ -232,17 +263,15 @@ print(f"  Low:   {l_daily}")
 
 # --- 2) Intraday OHLC from df_stream (9:30–16:00) ---
 df = df_stream.copy()
-df['date'] = pd.to_datetime(df['date'], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
-df = df.dropna(subset=['date', 'price']).sort_values('date')
 
 # Pick the trading day from the first timestamp (preserves tz if present)
-first_ts = df['date'].iloc[0]
+first_ts = df.index[0]
 day = first_ts.normalize()   # midnight of that calendar day, same tz-awareness
 start = day + pd.Timedelta(hours=9, minutes=30)
 end   = day + pd.Timedelta(hours=16)
 
 # Session slice
-session = df[(df['date'] >= start) & (df['date'] <= end)]
+session = df[(df.index >= start) & (df.index <= end)]
 
 
 o_intraday = session.iloc[(session['date'] - start).abs().argmin()]['price']

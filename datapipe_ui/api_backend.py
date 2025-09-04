@@ -48,8 +48,9 @@ class APIBackend:
     def check_deployment_status(self, deployment_id: str):
         try:
             path = f"/deployments/{deployment_id}"
-            logger.info(f"Checking deployment status...")
-            response = self.api_client.send(path, method = "GET")
+            if self.verbose_logging: logger.info(f"Checking deployment status...")
+            log = True if self.verbose_logging else False
+            response = self.api_client.send(path, method = "GET", verbose_logging = log)
             if self.verbose_logging: logger.debug("Response: %s", response)
             return response
         except requests.exceptions.RequestException as e:
@@ -67,8 +68,9 @@ class APIBackend:
     def check_flow_run_status(self, flow_run_id: str):
         try:
             path = f"/flow_runs/{flow_run_id}"
-            logger.info(f"Checking status for flow run {flow_run_id}...")
-            response = self.api_client.send(path, method = "GET")
+            if self.verbose_logging: logger.info(f"Checking status for flow run {flow_run_id}...")
+            log = True if self.verbose_logging else False
+            response = self.api_client.send(path, method = "GET", verbose_logging = log)
             if self.verbose_logging: logger.debug("Response: %s", response)
             return response
         except requests.exceptions.RequestException as e:

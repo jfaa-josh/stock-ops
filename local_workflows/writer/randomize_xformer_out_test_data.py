@@ -33,4 +33,5 @@ NOTE: xformer_out_test_data.txt contains:
 - There is one historical interday entry with a duplicated timestamp, with an updated value for open
 - There is one historical intraday intry with Nonetype data (should not be stored in .db)
 - There is one historical interday with a different ticker
+- There is one set of quotes and prices streaming data at the same timestamp
 """

@@ -180,6 +180,7 @@ class SQLiteWriter:
         provider: str,
         exchange: str,
         db_just_opened: bool,
+        mode: str,
     ) -> None:
         # Ensure meta & stats tables exist (DB-level)
         cur.execute('CREATE TABLE IF NOT EXISTS "__meta__" (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
@@ -193,19 +194,20 @@ class SQLiteWriter:
             "  max_date TEXT,"
             "  updated_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
         )
-        cur.execute(
-            'CREATE TABLE IF NOT EXISTS "__interval_stats__" ('
-            "  table_name TEXT NOT NULL,"
-            "  interval   TEXT NOT NULL,"
-            "  row_count  INTEGER NOT NULL DEFAULT 0,"
-            "  min_timestamp_utc_s REAL,"
-            "  max_timestamp_utc_s REAL,"
-            "  min_date TEXT,"
-            "  max_date TEXT,"
-            "  updated_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
-            "  PRIMARY KEY (table_name, interval)"
-            ")"
-        )
+        if mode != "streaming":
+            cur.execute(
+                'CREATE TABLE IF NOT EXISTS "__interval_stats__" ('
+                "  table_name TEXT NOT NULL,"
+                "  interval   TEXT NOT NULL,"
+                "  row_count  INTEGER NOT NULL DEFAULT 0,"
+                "  min_timestamp_utc_s REAL,"
+                "  max_timestamp_utc_s REAL,"
+                "  min_date TEXT,"
+                "  max_date TEXT,"
+                "  updated_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                "  PRIMARY KEY (table_name, interval)"
+                ")"
+            )
 
         if db_just_opened:
             try:
@@ -231,7 +233,7 @@ class SQLiteWriter:
         exists = cur.fetchone() is not None
 
         if not exists:
-            col_defs = []
+            col_defs = []  # Create table with typed index columns
             for c in idx_cols:
                 col_defs.append(f"{c} {self.target_affinity[c]} NOT NULL")
             col_defs.append('"version" INTEGER NOT NULL DEFAULT 1')
@@ -273,13 +275,13 @@ class SQLiteWriter:
 
             # Create/verify meta + stats + table
             cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1;")
-            db_just_opened = cur.fetchone() is None
-            self._verify_or_create_tables(cur, table_name, idx_cols, provider, exchange, db_just_opened)
+            db_just_opened = cur.fetchone() is None  # If table created for first time not reopened
+            self._verify_or_create_tables(cur, table_name, idx_cols, provider, exchange, db_just_opened, mode)
             conn.commit()
         if self._cursor is None:
             raise RuntimeError("Failed to initialize cursor")
 
-        # Verify table shape & cache
+        # Verify table shape & cache for index columns
         cur = self._cursor
         cur.execute(f'PRAGMA table_info("{table_name}")')
         existing_cols = {row["name"] for row in cur.fetchall()}
@@ -462,47 +464,45 @@ class SQLiteWriter:
                         raise ValueError(f"Missing required index column '{c}' (mode={mode})")
                 idx_vals = tuple(payload[c] for c in idx_cols)
 
-                # 1) Subset by index
+                ### Check for dupes
+                # Subset by index
                 cur.execute(select_subset_sql, idx_vals)
                 subset_rows = cur.fetchall()
                 logger.debug("subset_rows=%d for idx=%s", len(subset_rows), idx_vals)
 
-                # Keys to compare for exactness
-                cmp_keys = [k for k in payload.keys() if k not in {"msg_id", "version"}]
-
-                # 2) Exact-match across cmp_keys?
-                is_exact_dup = False
-                max_version = 0
-                for r in subset_rows:
-                    rv = int(r["version"]) if r["version"] is not None else 0
-                    if rv > max_version:
-                        max_version = rv
-                    # compare cmp_keys
-                    all_equal = True
-                    for k in cmp_keys:
-                        db_val = r[k] if k in r.keys() else None
-                        if db_val != payload.get(k):
-                            all_equal = False
+                version = 1
+                if subset_rows:
+                    sentinel = object()
+                    p_items = tuple(payload.items())
+                    is_exact_dup = False
+                    for r in subset_rows:
+                        rd = dict(r)  # convert Row to plain dict to use .get()
+                        # Test if payload has all keys and all match (exact duplicate)
+                        if all(rd.get(k, sentinel) == v for k, v in p_items):
+                            is_exact_dup = True
                             break
-                    if all_equal:
-                        is_exact_dup = True
-                        break
 
-                if is_exact_dup:
-                    ok_ids.append(msg_id)
-                    logger.debug("Exact duplicate detected; ack only. idx=%s", idx_vals)
-                    continue
+                    if is_exact_dup:
+                        ok_ids.append(msg_id)
+                        logger.debug("Exact duplicate detected; ack only. idx=%s", idx_vals)
+                        continue
 
-                # 3) versioning
-                new_version = 1 if not subset_rows else (max_version + 1)
+                    ### Set new version number
+                    cur.execute(  # Subset row with max version number
+                        f'SELECT * FROM "{table_name}" WHERE {where_sql} ORDER BY "version" DESC NULLS LAST LIMIT 1;',
+                        idx_vals,
+                    )
+                    row_max = cur.fetchone()
+                    max_version = int(row_max["version"]) if row_max and row_max["version"] is not None else 0
+                    version = max_version + 1
 
                 # Assemble values for insert
                 row_vals: list[Any] = []
                 row_vals.extend(payload.get(c) for c in idx_cols)  # index
                 row_vals.extend(payload.get(c) for c in non_index_payload_cols)  # data
-                row_vals.append(int(new_version))  # version
-                if new_version > 1:
-                    logger.debug("Insert with version=%d idx=%s", new_version, idx_vals)
+                row_vals.append(int(version))  # version
+                if version > 1:
+                    logger.debug("Insert with version=%d idx=%s", version, idx_vals)
 
                 try:
                     cur.execute(insert_sql, row_vals)
@@ -704,6 +704,7 @@ class SQLiteReader:
         Return all 1m rows for table between [start, end] (inclusive) across the given files.
         Skips missing/empty files gracefully. Returns a single list of dicts sorted by datetime.
         """
+        rows = []
         out: list[dict] = []
         for db in db_files:
             if not Path(db).exists():
