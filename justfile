@@ -25,11 +25,18 @@ mypy:
 test:
     uv run pytest -vv
 
-# If data/ exists, delete everything except data/test_data/inputs/
+# If data/ exists, delete everything except data/test_data/inputs/**
 clean-data:
-    [ ! -d data ] || find data -mindepth 1 \
-    \( -path data/test_data/inputs -o -path 'data/test_data/inputs/*' \) -prune -o \
-    -exec rm -rf {} +
+  set -euo pipefail
+  if [[ -d data ]]; then
+    find data -mindepth 1 \
+      ! -path 'data/test_data/inputs' \
+      ! -path 'data/test_data/inputs/*' \
+      -exec rm -rf {} +
+    [[ -d data/test_data/inputs ]] && echo "Preserved data/test_data/inputs" || echo "data/test_data/inputs does not exist."
+  else
+    echo "data/ does not exist; nothing to clean."
+  fi
 
 # Generate a Dockerfile for the project
 docker-build:
