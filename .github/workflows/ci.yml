@@ -8,8 +8,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATA_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
       PYTHONPATH: src
+      # Set optional tokens, if not exist, defaults to empty str
+      EODHD_API_TOKEN: ${{ secrets.EODHD_API_TOKEN || '' }}
+      # Add additional token options here
 
     steps:
       - name: Checkout code
