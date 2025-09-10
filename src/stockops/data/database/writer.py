@@ -43,8 +43,16 @@ TRIM_EVERY_SEC = config.TRIM_EVERY_SEC
 stop_event = None  # module global
 
 # --- Singletons for TEST_MODE ---
+TEST_MODE = os.getenv("TEST_WRITER", "0") == "1"
 _FAKE_SERVER = None
 _STREAM = None
+
+
+def request_stop() -> None:
+    global stop_event
+    if stop_event is None:
+        stop_event = threading.Event()
+    stop_event.set()
 
 
 def init_stream():
@@ -59,15 +67,13 @@ def init_stream():
         return _STREAM  # idempotent
 
     stream_name = os.getenv("BUFFER_STREAM", "buf:ingest")
-    test_mode = os.getenv("TEST_WRITER", "0") == "1"
 
-    if test_mode:
+    if TEST_MODE:
         import fakeredis
 
         if _FAKE_SERVER is None:
             _FAKE_SERVER = fakeredis.FakeServer()
         _STREAM = wb.FakeRedisStream(stream_name, server=_FAKE_SERVER)
-        # REQUIRED in TEST_MODE so emit() reuses this same FakeRedis in-process
         wb.bind_stream(_STREAM)
     else:
         redis_url = os.getenv("REDIS_URL")
@@ -75,7 +81,7 @@ def init_stream():
             raise RuntimeError("REDIS_URL is not set; cannot connect to Redis in production.")
         _STREAM = wb.RedisStream(stream_name, redis_url=redis_url)
 
-    logger.info("Initialized stream '%s' (TEST_MODE=%s)", stream_name, test_mode)
+    logger.info("Initialized stream '%s' (TEST_MODE=%s)", stream_name, TEST_MODE)
     return _STREAM
 
 
@@ -96,7 +102,7 @@ def _install_signal_handlers() -> None:
 
 
 def _recover_pending(
-    stream, writer: SQLiteWriter, group: str, consumer: str, count: int = 100, min_idle_ms: int = CLAIM_MIN_IDLE_SEC
+    stream, writer: SQLiteWriter, group: str, consumer: str, count: int = 100, min_idle_s: int = CLAIM_MIN_IDLE_SEC
 ) -> None:
     """
     Use XAUTOCLAIM to grab stale pending messages and handle them as a normal batch.
@@ -104,7 +110,7 @@ def _recover_pending(
     try:
         start = "0-0"  # start is '0-0' initially; then use returned 'next_start' to continue
         while True:
-            resp = stream.r.xautoclaim(stream.stream, group, consumer, int(min_idle_ms), str(start), count=int(count))
+            resp = stream.r.xautoclaim(stream.stream, group, consumer, int(min_idle_s), str(start), count=int(count))
             claimed = []
             next_start = None
             if isinstance(resp, list | tuple):
@@ -252,7 +258,7 @@ def _log_buffer_stats(stream, group: str) -> None:
 
 def main() -> None:
     global stop_event
-    stop_event = threading.Event()  # For clean shutdown
+    stop_event = threading.Event()
     _install_signal_handlers()
 
     if _STREAM is None:
@@ -263,10 +269,8 @@ def main() -> None:
         raise RuntimeError("Stream is not initialized properly")
 
     stream.ensure_group(GROUP)
-
     writer = SQLiteWriter()
 
-    # Trim stream occasionally to cap memory/disk for any failed reads
     last_trim = 0.0
     last_recover = 0.0
 
@@ -279,14 +283,15 @@ def main() -> None:
         )
         _log_buffer_stats(stream, GROUP)
 
+        # ---- tighten block time so stop_event is honored promptly ----
+        block_once_ms = max(1, min(BLOCK_MS, 1000))
+
         while not stop_event.is_set():
-            batch = stream.read_group(GROUP, CONSUMER_ID, count=COUNT, block_ms=BLOCK_MS)
+            batch = stream.read_group(GROUP, CONSUMER_ID, count=COUNT, block_ms=block_once_ms)
             if not batch:
                 now = time.time()
                 if TRIM_MAXLEN and now - last_trim > TRIM_EVERY_SEC:
-                    logger.debug(
-                        "No messages available in buffer; attempting trim_maxlen if failed msgs exceed TRIM_MAXLEN"
-                    )
+                    logger.debug("No messages; attempting trim_maxlen...")
                     stream.trim_maxlen(TRIM_MAXLEN)
                     last_trim = now
                     logger.debug("Stream trimmed to ~%d entries", TRIM_MAXLEN)
@@ -295,7 +300,6 @@ def main() -> None:
             if batch:
                 logger.debug("Fetched batch of %d message(s) from group=%s consumer=%s", len(batch), GROUP, CONSUMER_ID)
 
-            # write and ack
             try:
                 ok_ids = _batch_to_writer(writer, batch)
                 if ok_ids:
@@ -309,18 +313,43 @@ def main() -> None:
             now = time.time()
             if now - last_recover > RECOVER_EVERY_SEC:
                 _log_buffer_stats(stream, GROUP)
+                # pass seconds or ms; function normalizes
                 _recover_pending(stream, writer, GROUP, CONSUMER_ID)
                 last_recover = now
 
     finally:
         _log_buffer_stats(stream, GROUP)
-        logger.info("Shutting down writer: flushing & closing SQLite.")
+        logger.info("Shutting down writer: flushing & closing SQLite and stream.")
         try:
-            # Drain all pending (claim regardless of idle time), write, then ACK+DEL
-            _recover_pending(stream, writer, GROUP, CONSUMER_ID, count=max(1000, COUNT), min_idle_ms=0)
+            # Drain anything left (claim regardless of idle time)
+            _recover_pending(stream, writer, GROUP, CONSUMER_ID, count=max(1000, COUNT), min_idle_s=0)
+        except Exception:
+            logger.exception("Error during final pending recovery")
+
+        # Always close the DB first
+        try:
             writer.close()
         except Exception:
             logger.exception("Error while closing SQLiteWriter")
+
+        # Close redis client to kill any helper threads
+        try:
+            r = getattr(stream, "r", None)
+            if r is not None:
+                try:
+                    r.close()  # redis-py 4+
+                except Exception:
+                    pass
+                try:
+                    # Ensures all sockets are closed and background helpers stop
+                    pool = getattr(r, "connection_pool", None)
+                    if pool is not None:
+                        pool.disconnect()
+                except Exception:
+                    pass
+        except Exception:
+            logger.exception("Error while closing Redis client")
+
         logger.info("Shutdown complete.")
 
 

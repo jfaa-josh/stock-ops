@@ -1,7 +1,15 @@
-import os, time, threading, ast, re, sys
+import os, time, threading, ast, re, sys, faulthandler, platform
 from pathlib import Path
 from typing import Tuple, Dict, Any
 import logging
+
+try:
+    # Works when imported as a package by pytest
+    from . import randomize_xformer_out_test_data as generator
+except ImportError:
+    # Fallback to run the file directly (python local_write.py)
+    import randomize_xformer_out_test_data as generator
+from stockops.config import config
 
 def import_locals(): # Do this here so that I can first set env vars
     from stockops.data.database import writer as writer_mod
@@ -9,13 +17,6 @@ def import_locals(): # Do this here so that I can first set env vars
     return writer_mod, emit
 
 
-# Logging setup
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-    force=True,
-)
 logger = logging.getLogger(__name__)
 
 os.environ["TEST_WRITER"] = "1"
@@ -23,39 +24,158 @@ os.environ["TEST_WRITER"] = "1"
 # Same inputs as docker compose
 os.environ["BUFFER_STREAM"] = "buf:ingest"
 os.environ["BUFFER_BATCH"] = "500"
-os.environ["BUFFER_BLOCK_MS"] = "10000"
+os.environ["BUFFER_BLOCK_MS"] = "1000" # Polling faster for test case for thread closing
 os.environ["BUFFER_TRIM_MAXLEN"] = "100000"
 
 writer_mod, emit = import_locals()
 
-# Start the writer in background
-t = threading.Thread(target=writer_mod.main, daemon=True)
-t.start()
-time.sleep(3)  # let it create the group
+def main():
+    def thread_idle(th, idle_secs=2.0):
+        ts = last_active.get(th.ident)
+        if ts is None:                  # no activity seen yet
+            return False
+        return (time.monotonic() - ts) >= idle_secs
 
-def parse_payload(s: str) -> Tuple[str, str, Dict[str, Any]]:
-    # Replace WindowsPath('...') / PosixPath("...") with just '...'
-    s2 = re.sub(r"(?:WindowsPath|PosixPath)\((['\"])(.*?)\1\)", r"'\2'", s)
-    d = ast.literal_eval(s2)  # safe: only literals after substitution
-    return d["db_path"], d["table"], d["row"]
+    def _trace(frame, event, arg):
+        # super lightweight; avoid heavy work here
+        last_active[threading.get_ident()] = time.monotonic()
+        return _trace
 
-# Feed test payloads
-test_data = Path(__file__).resolve().parents[0]/'test_data.txt'
-with test_data.open("r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
+    def _run_with_trace(fn):
+        sys.settrace(_trace)
+        try:
+            fn()
+        finally:
+            sys.settrace(None)
 
-        path_str, table, row = parse_payload(line)
+    def clear_directory(dir_path: Path):
+        """
+        Delete all files from the given directory, but keep the directory itself.
+        """
+        if not dir_path.exists() or not dir_path.is_dir():
+            raise ValueError(f"{dir_path} is not a valid directory.")
 
-        payload = {
-            "db_path": Path(path_str),
-            "table": table,
-            "row": row,
-        }
+        for file in dir_path.iterdir():
+            if file.is_file():
+                file.unlink()  # deletes the file
 
-        emit(payload)
+    def parse_payload(s: str) -> Tuple[str, str, Dict[str, Any]]:
+        s2 = re.sub(r"(?:WindowsPath|PosixPath)\((['\"])(.*?)\1\)", r"'\2'", s)
+        d = ast.literal_eval(s2)  # safe: only literals after substitution
+        return d["db_path"], d["table"], d["row"]
 
-t.join() # In reality this would be a never ending service, but for testing I
-    # shutdown once test_data.txt is finished
+    def dbs_quiescent(paths, quiet_secs=2.0):
+        def snap():
+            m = {}
+            for p in paths:
+                try:
+                    st = os.stat(p)
+                    m[p] = (True, st.st_mtime, st.st_size)
+                except FileNotFoundError:
+                    m[p] = (False, 0.0, 0)
+            return m
+        s1 = snap()
+        time.sleep(quiet_secs)
+        s2 = snap()
+        if s1 != s2:
+            sys.stderr.write(">>> dbs not quiet; diffs:\n"); sys.stderr.flush()
+            for p in paths:
+                if s1.get(p) != s2.get(p):
+                    sys.stderr.write(f"    {p}: {s1.get(p)} -> {s2.get(p)}\n"); sys.stderr.flush()
+        return s1 == s2
+
+    # Clear existing outputs and generate input test data
+    clear_directory(config.RAW_HISTORICAL_DIR)
+    clear_directory(config.RAW_STREAMING_DIR)
+
+    generator.main()
+
+    # Start the writer in background
+    last_active = {}
+
+    t = threading.Thread(target=lambda: _run_with_trace(writer_mod.main), daemon=True)
+    t.start()
+    time.sleep(3)
+
+    db_paths_seen = set()
+
+    # Feed test payloads
+    test_data = config.DATA_RAW_DIR/'inputs'/'test_data.txt'
+    with test_data.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            path_str, table, row = parse_payload(line)
+
+            payload = {
+                "db_path": Path(path_str),
+                "table": table,
+                "row": row,
+            }
+            emit(payload)
+
+            db_paths_seen.add(Path(path_str))
+
+    # Arm only while waiting
+    IS_WIN = platform.system() == "Windows"
+
+    # Signal the writer to stop and wake any blocking read
+    if hasattr(writer_mod, "request_stop"):
+        writer_mod.request_stop()
+        time.sleep(0.05)  # tiny head start for the wake xadd
+
+    faulthandler.enable(file=sys.stderr, all_threads=not IS_WIN)
+
+    # avoid dump_traceback_later on Windows (it always dumps all threads)
+    if not IS_WIN:
+        faulthandler.dump_traceback_later(15, repeat=False)
+
+    sys.stderr.write(">>> entering quiescence wait\n"); sys.stderr.flush()
+    logger.info("Entering quiescence wait\n")
+
+    # --- bounded quiescence wait ---
+    deadline = time.monotonic() + 60.0  # 60s cap
+    while t.is_alive():
+        if thread_idle(t, idle_secs=2.0) and dbs_quiescent(db_paths_seen, quiet_secs=2.0):
+            break
+        if time.monotonic() >= deadline:
+            sys.stderr.write(">>> quiescence wait timed out\n"); sys.stderr.flush()
+            logger.warning("Quiescence wait timed out\n")
+            # one debug pass to show which file(s) keep changing
+            dbs_quiescent(db_paths_seen, quiet_secs=0.5)
+            break
+        time.sleep(0.2)
+
+    # cancel any pending delayed dump now that we're done waiting
+    if not IS_WIN:
+        faulthandler.cancel_dump_traceback_later()
+
+    # --- attempt to finish the writer thread (won't block because it's daemon) ---
+    t.join(timeout=1.0)
+
+    # --- diagnostics ---
+    live = [th for th in threading.enumerate() if th.is_alive()]
+    print("\n=== Live threads at shutdown ===", flush=True)
+    for th in live:
+        print(f"name={th.name!r} ident={th.ident} daemon={th.daemon} alive={th.is_alive()}", flush=True)
+
+    print("\n=== Stacks of live threads ===", flush=True)
+    # Final dump: avoid all_threads on Windows
+    faulthandler.dump_traceback(file=sys.stdout, all_threads=not IS_WIN)
+
+    # If some non-daemon threads persist, avoid CI hangs:
+    if any(not th.daemon for th in live if th is not threading.current_thread()):
+        sys.stderr.write(">>> non-daemon threads remain; forcing exit (tests only)\n"); sys.stderr.flush()
+        os._exit(0)
+
+    logger.info("Writer test completed successfully!\n")
+
+if __name__ == "__main__":
+    # Logging setup
+    logging.basicConfig(
+        level=logging.INFO,  # or DEBUG
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+    main()

@@ -364,18 +364,21 @@ class Section:
             st.error("Please choose a DTSTART date and time.")
             return (True, None)
 
+        # Anchor boundary
+        dtstart_anchor = dt.datetime.combine(dtstart_date, dtstart_time)
+
+        if until_dt and until_dt <= dtstart_anchor:
+            st.error("UNTIL must be after DTSTART.")
+            return (True, None)
+
         if times is not None:
             # MULTI
             for t in times:
-                dtstart_local = dt.datetime.combine(dtstart_date, t)
-                if until_dt and until_dt <= dtstart_local:
-                    st.error("ALL UNTIL must be after DTSTART.")
-                    return (True, None)
                 try:
                     sched = self.svc.build_schedule(
                         timezone=tz_key,
                         freq=freq,
-                        dtstart_local=dtstart_local,
+                        dtstart_local=dtstart_anchor,
                         interval=int(interval),
                         byweekday=(monthly_byweekday if freq == "MONTHLY" and monthly_byweekday else byweekday),
                         bymonthday=bymonthday,
@@ -391,15 +394,11 @@ class Section:
                 schedules.append(sched)
         else:
             # SINGLE
-            dtstart_local = dt.datetime.combine(dtstart_date, dtstart_time)
-            if until_dt and until_dt <= dtstart_local:
-                st.error("UNTIL must be after DTSTART.")
-                return (True, None)
             try:
                 sched = self.svc.build_schedule(
                     timezone=tz_key,
                     freq=freq,
-                    dtstart_local=dtstart_local,
+                    dtstart_local=dtstart_anchor,
                     interval=int(interval),
                     byweekday=(monthly_byweekday if freq == "MONTHLY" and monthly_byweekday else byweekday),
                     bymonthday=bymonthday,

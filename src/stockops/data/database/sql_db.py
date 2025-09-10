@@ -273,16 +273,24 @@ class SQLiteWriter:
             cur = conn.cursor()
             self._conn, self._cursor, self._open_db = conn, cur, db_filepath
 
-            # Create/verify meta + stats + table
-            cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1;")
-            db_just_opened = cur.fetchone() is None  # If table created for first time not reopened
-            self._verify_or_create_tables(cur, table_name, idx_cols, provider, exchange, db_just_opened, mode)
-            conn.commit()
         if self._cursor is None:
             raise RuntimeError("Failed to initialize cursor")
 
-        # Verify table shape & cache for index columns
+        if self._conn is None:
+            raise RuntimeError("Database connection was not initialized (self._conn is None).")
+
         cur = self._cursor
+
+        # Ensure the target table exists even if the DB was already open
+        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;", (table_name,))
+        if cur.fetchone() is None:
+            # DB wasn't "just opened", we're just adding a new table to an existing DB
+            self._verify_or_create_tables(
+                cur, table_name, idx_cols, provider, exchange, db_just_opened=False, mode=mode
+            )
+            self._conn.commit()
+
+        # Verify table shape & cache for index columns
         cur.execute(f'PRAGMA table_info("{table_name}")')
         existing_cols = {row["name"] for row in cur.fetchall()}
         required = set(idx_cols) | {"version"}
@@ -291,6 +299,7 @@ class SQLiteWriter:
                 f'Table "{table_name}" does not match requested index-mode {mode}; '
                 f"missing required columns {sorted(required - existing_cols)}."
             )
+
         self._open_for = target
         self._table_meta[target] = {"mode": mode, "cols": existing_cols}
 

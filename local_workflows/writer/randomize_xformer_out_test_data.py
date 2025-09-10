@@ -1,29 +1,29 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Aug 18 10:19:21 2025
-
-@author: JoshFody
-"""
-
-from pathlib import Path
 import random
 
-file = Path(r'C:\Python Repositories\Backed Up to Git\stocks-ops\local_workflows\writer\xformer_out_test_data.txt')
-target_file = Path(r'C:\Python Repositories\Backed Up to Git\stocks-ops\local_workflows\writer\test_data.txt')
+from stockops.config import config
 
-with open(file, 'r') as f:
-    txt = f.readlines()
+def main():
+    data_dir = config.DATA_RAW_DIR/'inputs'
 
-new_rows = []
-for row in txt:
-    if row.startswith("{'db_path"):
-        new_rows.append(row)
+    input_file = data_dir/'xformer_out_test_data.txt'
+    target_file = data_dir/'test_data.txt'
 
-random.shuffle(new_rows)
+    with open(input_file, 'r') as f:
+        txt = f.readlines()
 
-with open(target_file, "w", encoding="utf-8") as f:
-    for x in new_rows:
-        f.write(f"{x}\n")   # ensures a newline per element
+    new_rows = []
+    for row in txt:
+        if row.startswith("{'db_path"):
+            new_rows.append(row)
+
+    random.shuffle(new_rows)
+
+    with open(target_file, "w", encoding="utf-8") as f:
+        for x in new_rows:
+            f.write(f"{x}\n")   # ensures a newline per element
+
+if __name__ == "__main__":
+    main()
 
 """
 NOTE: xformer_out_test_data.txt contains:

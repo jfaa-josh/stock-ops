@@ -1,5 +1,4 @@
-from typing import Protocol, runtime_checkable
-from typing import Any, Dict, Union, List
+from typing import Protocol, runtime_checkable, Any, Dict, Union, List
 from pathlib import Path
 from contextlib import contextmanager
 import sys

@@ -23,7 +23,7 @@ mypy:
     uv run mypy
 
 test:
-    uv run pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
+    uv run pytest -vv
 
 # Generate a Dockerfile for the project
 docker-build:
