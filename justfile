@@ -25,6 +25,9 @@ mypy:
 test:
     uv run pytest -vv
 
+clean-data: # Remove all generated files in CI after tests
+    find data -mindepth 1 -path data/test_data/inputs -prune -o -exec rm -rf {} + 2>/dev/null || true
+
 # Generate a Dockerfile for the project
 docker-build:
   chmod +x scripts/derive_env_from_pyproject.py

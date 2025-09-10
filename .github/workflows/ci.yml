@@ -41,6 +41,8 @@ jobs:
       - name: Run tests
         run: just test
 
+      - name: Clean up
+        run: just clean-data
   docker:
     name: Build Docker Images
     needs: build
