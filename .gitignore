@@ -129,7 +129,7 @@ MANIFEST
 # Ignore everything in /data except for test scripts needed in ci
 /data/*
 !/data/test_data/
-!/data/test_data/inputs/
+data/test_data/*
 !/data/test_data/inputs/**
 
 # ====================
