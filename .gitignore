@@ -127,10 +127,9 @@ MANIFEST
 # Local Data
 # ==============
 # Ignore everything in /data except for test scripts needed in ci
-/data/**
-!/data/
+/data/*
 !/data/test_data/
-/data/test_data/**
+/data/test_data/*
 !/data/test_data/inputs/**
 
 # ====================
