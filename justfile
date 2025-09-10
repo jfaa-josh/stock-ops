@@ -29,9 +29,9 @@ clean-data:
     # If data/ exists, delete everything except data/test_data/inputs/
     if [ -d data ]; then
         find data -mindepth 1 \
-        -path data/test_data/inputs -prune \
-        -o -path "data/test_data/inputs/*" -prune \
-        -o -exec rm -rf {} +
+            -path data/test_data/inputs -prune \
+            -o -path "data/test_data/inputs/*" -prune \
+            -o -exec rm -rf {} +
     fi
 
 # Generate a Dockerfile for the project
