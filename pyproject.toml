@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     {name = "Josh Fody", email = "josh@jfadvancedanalytics.com"}
 ]
-requires-python = "~=3.13"
+requires-python = "~=3.13.0" # means “3.13.x”
 dependencies = [
     "numpy",
     "pandas",
@@ -89,8 +89,8 @@ mypy_path = ["src", "tests"]
 # strict = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
 testpaths = ["tests"]
+markers = ["integration: marks integration tests"]
 
 # sensible defaults so don't need to pass them at command
 addopts = "-m integration -rA --full-trace --durations=0"
