@@ -76,12 +76,10 @@ def main():
         """
         Delete all files from the given directory, but keep the directory itself.
         """
-        if not dir_path.exists() or not dir_path.is_dir():
-            raise ValueError(f"{dir_path} is not a valid directory.")
-
-        for file in dir_path.iterdir():
-            if file.is_file():
-                file.unlink()  # deletes the file
+        if dir_path.exists() and dir_path.is_dir():
+            for file in dir_path.iterdir():
+                if file.is_file():
+                    file.unlink()  # deletes the file
 
     def parse_payload(s: str) -> Tuple[str, str, Dict[str, Any]]:
         s2 = re.sub(r"(?:WindowsPath|PosixPath)\((['\"])(.*?)\1\)", r"'\2'", s)
