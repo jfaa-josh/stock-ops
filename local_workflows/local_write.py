@@ -1,14 +1,8 @@
-import os, time, threading, ast, re, sys, faulthandler, platform
+import os, time, threading, ast, re, sys, faulthandler, platform, random
 from pathlib import Path
 from typing import Tuple, Dict, Any
 import logging
 
-try:
-    # Works when imported as a package by pytest
-    from . import randomize_xformer_out_test_data as generator
-except ImportError:
-    # Fallback to run the file directly (python local_write.py)
-    import randomize_xformer_out_test_data as generator
 from stockops.config import config
 
 def import_locals(): # Do this here so that I can first set env vars
@@ -30,6 +24,36 @@ os.environ["BUFFER_TRIM_MAXLEN"] = "100000"
 writer_mod, emit = import_locals()
 
 def main():
+    def make_test_data_txt():
+        """
+        NOTE: xformer_out_test_data.txt contains:
+        - all 4 producer types for EODHD data.
+        - Historical intraday spans 2 days
+        - There is one duplicated entry (1755526670499 ts for streaming SPY).
+        - There is one historical interday entry with a duplicated timestamp, with an updated value for open
+        - There is one historical intraday intry with Nonetype data (should not be stored in .db)
+        - There is one historical interday with a different ticker
+        - There is one set of quotes and prices streaming data at the same timestamp
+        """
+        data_dir = config.DATA_RAW_DIR/'inputs'
+
+        input_file = data_dir/'xformer_out_test_data.txt'
+        target_file = data_dir/'test_data.txt'
+
+        with open(input_file, 'r') as f:
+            txt = f.readlines()
+
+        new_rows = []
+        for row in txt:
+            if row.startswith("{'db_path"):
+                new_rows.append(row)
+
+        random.shuffle(new_rows)
+
+        with open(target_file, "w", encoding="utf-8") as f:
+            for x in new_rows:
+                f.write(f"{x}\n")   # ensures a newline per element
+
     def thread_idle(th, idle_secs=2.0):
         ts = last_active.get(th.ident)
         if ts is None:                  # no activity seen yet
@@ -88,7 +112,7 @@ def main():
     clear_directory(config.RAW_HISTORICAL_DIR)
     clear_directory(config.RAW_STREAMING_DIR)
 
-    generator.main()
+    make_test_data_txt() # Create or overwrite test_data.txt
 
     # Start the writer in background
     last_active = {}

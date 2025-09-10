@@ -25,8 +25,14 @@ mypy:
 test:
     uv run pytest -vv
 
-clean-data: # Remove all generated files in CI after tests
-    find data -mindepth 1 -path data/test_data/inputs -prune -o -exec rm -rf {} + 2>/dev/null || true
+clean-data:
+    # If data/ exists, delete everything except data/test_data/inputs/
+    if [ -d data ]; then
+        find data -mindepth 1 \
+            -path data/test_data/inputs -prune \
+            -o -path "data/test_data/inputs/*" -prune \
+            -o -exec rm -rf {} +
+    fi
 
 # Generate a Dockerfile for the project
 docker-build:
