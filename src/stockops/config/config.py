@@ -20,7 +20,7 @@ def get_writedata_path(data_dir):  # Switch for docker vs local
     if "DB_DATA_DIR" in os.environ:
         return data_dir / "raw"
     else:
-        return data_dir / "git_lfs" / "test_data"
+        return data_dir / "test_data"
 
 
 DATA_DIR = get_data_path(ROOT_DIR / "data")

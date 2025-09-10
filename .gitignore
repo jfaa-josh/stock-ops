@@ -126,10 +126,11 @@ MANIFEST
 # ==============
 # Local Data
 # ==============
-# Ignore everything in /data except for everything in /git_lfs
+# Ignore everything in /data except for test scripts needed in ci
 /data/*
-!/data/git_lfs/
-!/data/git_lfs/**
+!/data/test_data/
+!/data/test_data/inputs/
+!/data/test_data/inputs/**
 
 # ====================
 # Misc (make, temp, etc)
