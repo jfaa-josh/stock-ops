@@ -4,7 +4,7 @@ from functools import lru_cache
 from typing import Dict, Any, List, Union
 import os
 
-import api_client
+import datapipe_ui.api_client as api_client
 
 logger = logging.getLogger(__name__)
 

@@ -7,9 +7,9 @@ import logging
 import datetime as dt
 from zoneinfo import ZoneInfo
 
-from api_factory import ApiLike, make_api
-from ui_backend import DeploymentService
-from utils import summarize_schedules_for_ui, parse_times_csv
+from datapipe_ui.api_factory import ApiLike, make_api
+from datapipe_ui.ui_backend import DeploymentService
+from datapipe_ui.utils import summarize_schedules_for_ui, parse_times_csv
 
 # Logging setup
 logging.basicConfig(

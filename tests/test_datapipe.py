@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 
 ENTRYPOINTS = [
+    ("local_workflows.streamlit_local.local_streamlit_ci", "main"),
     ("local_workflows.local_write", "main"),
     # ("local_workflows.local_read", "main"),
-    # add more here (streamlit, etl, etc)
+    # add more here (etl, etc)
 ]
 
 pytestmark = pytest.mark.integration
