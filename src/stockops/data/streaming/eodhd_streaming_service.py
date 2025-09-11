@@ -18,29 +18,53 @@ from .base_streaming_service import AbstractStreamingService
 
 logger = logging.getLogger(__name__)
 
-TEST_SERVICES = os.getenv("TEST_SERVICES", "0") == "1"
-
 
 class EODHDStreamingService(AbstractStreamingService):
     def __init__(self):
         pass
 
-    def write_data(self, table_name: str, exchange: str, transformed_row: dict, test_mode: bool):
+    def write_data(self, table_name: str, exchange: str, transformed_row: dict, test_mode: str, data_type: str):
         filename = get_db_filename_for_date(
             "streaming", self.tz, "EODHD", exchange, transformed_row["timestamp_UTC_ms"]
         )
         db_path = Path(config.RAW_STREAMING_DIR) / str(filename)
 
-        if test_mode:
+        if test_mode == "false":
             print({"db_path": db_path, "table": table_name, "row": transformed_row})
-        else:
+        elif test_mode == "local":
             emit({"db_path": db_path, "table": table_name, "row": transformed_row})
+        elif test_mode == "ci":
+            if data_type == "streaming_trades":
+                expected = [("timestamp_UTC_ms", int), ("price", float), ("volume", int)]
+
+                assert len(transformed_row) == len(expected), "Length of transformed != length of expected"
+                for key, expected_type in expected:
+                    assert key in transformed_row, f"Missing key {key} in intraday data"
+                    assert isinstance(transformed_row[key], expected_type), (
+                        f"Key {key} has type {type(transformed_row[key]).__name__}, expected {expected_type.__name__}"
+                    )
+            elif data_type == "streaming_quotes":
+                expected = [
+                    ("timestamp_UTC_ms", int),
+                    ("ask_price", float),
+                    ("bid_price", float),
+                    ("ask_size", int),
+                    ("bid_size", int),
+                ]
+
+                assert len(transformed_row) == len(expected), "Length of transformed != length of expected"
+                for key, expected_type in expected:
+                    assert key in transformed_row, f"Missing key {key} in intraday data"
+                    assert isinstance(transformed_row[key], expected_type), (
+                        f"Key {key} has type {type(transformed_row[key]).__name__}, expected {expected_type.__name__}"
+                    )
 
     async def _stream_data(
-        self, ws_url: str, stream_type: str, exchange: str, tickers: list[str], duration: int, test_mode: bool
+        self, ws_url: str, stream_type: str, exchange: str, tickers: list[str], duration: int, test_mode: str
     ):
         table_name = "No Ticker Set"  # This pulls from actual returned data rather than tickers
-        transform = TransformData("EODHD", f"streaming_{stream_type}", "to_db_writer", exchange)
+        data_type = f"streaming_{stream_type}"
+        transform = TransformData("EODHD", data_type, "to_db_writer", exchange)
 
         assert len(tickers) == 1, (
             "Please modify eodhd_streaming_service:_stream_data code to loop over multiple tickers..."
@@ -73,7 +97,7 @@ class EODHDStreamingService(AbstractStreamingService):
             backoff = min(backoff * 2.0, max_backoff)
             return True
 
-        def process_parsed(data: dict, raw: str | bytes) -> None:
+        def process_parsed(data: dict, raw: str | bytes, data_type: str) -> None:
             """Process one already-parsed JSON dict."""
             nonlocal table_name
             if "status_code" in data and "message" in data:
@@ -87,7 +111,7 @@ class EODHDStreamingService(AbstractStreamingService):
             table_name = s
             logger.debug("[%s] Received: %s", table_name, data)
             transformed_row = transform(data)
-            self.write_data(table_name, exchange, transformed_row, test_mode)
+            self.write_data(table_name, exchange, transformed_row, test_mode, data_type)
 
         while True:
             # Global duration gate
@@ -134,31 +158,44 @@ class EODHDStreamingService(AbstractStreamingService):
                     # Compute remaining after subscribe
                     tl = time_left()
 
-                    async def run_read_loop(buf_raw, buf_parsed) -> None:
+                    async def run_read_loop(buf_raw, buf_parsed, data_type) -> None:
                         # Process buffered frame (if any) first
                         if buf_raw is not None and isinstance(buf_parsed, dict):
-                            process_parsed(buf_parsed, buf_raw)
+                            process_parsed(buf_parsed, buf_raw, data_type)
 
-                        # Main stream loop
-                        async for message in websocket:
-                            try:
-                                data = json.loads(message)
-                            except json.JSONDecodeError:
-                                safe = (
-                                    message.decode("utf-8", errors="replace")
-                                    if isinstance(message, (bytes | bytearray))
-                                    else str(message)
+                        mock_message: str = ""
+                        if test_mode == "ci":
+                            if data_type == "streaming_trades":
+                                mock_message = (
+                                    '{"s":"SPY","p":657.5311,"v":5,"e":14,"c":[37],"dp":false,"t":1757623532850}'
                                 )
-                                logger.warning("[%s] Non-JSON message: %s", table_name, safe)
-                                continue
-                            process_parsed(data, message)
+                            elif data_type == "streaming_quotes":
+                                mock_message = '{"s":"SPY","ap":657.6079,"as":5,"bp":657.5421,"bs":6,"t":1757623905553}'
+                            data = json.loads(mock_message)
+
+                            process_parsed(data, mock_message, data_type)
+                            return  # Avoid falling into the live loop in ci mode
+                        else:
+                            # Main stream loop
+                            async for message in websocket:
+                                try:
+                                    data = json.loads(message)
+                                except json.JSONDecodeError:
+                                    safe = (
+                                        message.decode("utf-8", errors="replace")
+                                        if isinstance(message, (bytes | bytearray))
+                                        else str(message)
+                                    )
+                                    logger.warning("[%s] Non-JSON message: %s", table_name, safe)
+                                    continue
+                                process_parsed(data, message, data_type)
 
                     if tl and tl > 0:
                         # Only apply timeout if we actually have a time budget
                         async with asyncio.timeout(tl):
-                            await run_read_loop(buffered_raw, buffered_parsed)
+                            await run_read_loop(buffered_raw, buffered_parsed, data_type)
                     else:
-                        await run_read_loop(buffered_raw, buffered_parsed)
+                        await run_read_loop(buffered_raw, buffered_parsed, data_type)
 
                     # If we exit the read loop normally, loop back to reconnect unless duration expired
                     continue
@@ -189,6 +226,15 @@ class EODHDStreamingService(AbstractStreamingService):
 
     def start_stream(self, command: dict):
         TEST_SERVICES = os.getenv("TEST_SERVICES", "0") == "1"
+        TEST_CI = os.getenv("TEST_CI", "0") == "1"
+
+        assert not (TEST_SERVICES and TEST_CI), "TEST_SERVICES and TEST_CI cannot both be enabled at the same time"
+
+        test_mode = "false"
+        if TEST_SERVICES:
+            test_mode = "local"
+        elif TEST_CI:
+            test_mode = "ci"
 
         required_keys = ["tickers", "duration", "stream_type", "exchange"]
         for key in required_keys:
@@ -210,4 +256,4 @@ class EODHDStreamingService(AbstractStreamingService):
         tz_str = cast(str, eodhd_config.EXCHANGE_METADATA[exchange.upper()]["Timezone"])
         self.tz = ZoneInfo(tz_str)
 
-        asyncio.run(self._stream_data(url, stream_type, exchange.upper(), tickers, duration, TEST_SERVICES))
+        asyncio.run(self._stream_data(url, stream_type, exchange.upper(), tickers, duration, test_mode))

@@ -23,7 +23,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
     def __init__(self):
         pass
 
-    def write_data(self, data_type: str, table_name: str, exchange: str, transformed_row: dict, test_mode: bool):
+    def write_data(self, data_type: str, table_name: str, exchange: str, transformed_row: dict, test_mode: str):
         transformer_data_type = f"historical_{data_type}"
         if data_type == "interday":
             entry_datetime = None
@@ -33,22 +33,85 @@ class EODHDHistoricalService(AbstractHistoricalService):
         filename = get_db_filename_for_date(transformer_data_type, self.tz, "EODHD", exchange, entry_datetime)
         db_path = Path(config.RAW_HISTORICAL_DIR) / str(filename)
 
-        if test_mode:
+        if test_mode == "false":
             print({"db_path": db_path, "table": table_name, "row": transformed_row})
-        else:
+        elif test_mode == "local":
             emit({"db_path": db_path, "table": table_name, "row": transformed_row})
+        elif test_mode == "ci":
+            if data_type == "intraday":
+                expected = [
+                    ("timestamp_UTC_s", int),
+                    ("open", float),
+                    ("high", float),
+                    ("low", float),
+                    ("close", float),
+                    ("volume", int),
+                    ("interval", str),
+                ]
 
-    def _fetch_data(self, ws_url: str, data_type: str, exchange: str, ticker: str, interval: str, test_mode: bool):
+                assert len(transformed_row) == len(expected), "Length of transformed != length of expected"
+                for key, expected_type in expected:
+                    assert key in transformed_row, f"Missing key {key} in intraday data"
+                    assert isinstance(transformed_row[key], expected_type), (
+                        f"Key {key} has type {type(transformed_row[key]).__name__}, expected {expected_type.__name__}"
+                    )
+            elif data_type == "interday":
+                expected = [
+                    ("date", str),
+                    ("open", float),
+                    ("high", float),
+                    ("low", float),
+                    ("close", float),
+                    ("adjusted_close", float),
+                    ("volume", int),
+                    ("interval", str),
+                ]
+
+                assert len(transformed_row) == len(expected), "Length of transformed != length of expected"
+                for key, expected_type in expected:
+                    assert key in transformed_row, f"Missing key {key} in intraday data"
+                    assert isinstance(transformed_row[key], expected_type), (
+                        f"Key {key} has type {type(transformed_row[key]).__name__}, expected {expected_type.__name__}"
+                    )
+
+    def _fetch_data(self, ws_url: str, data_type: str, exchange: str, ticker: str, interval: str, test_mode: str):
         transform = TransformData("EODHD", f"historical_{data_type}", "to_db_writer", exchange)
         table_name = ticker
 
-        try:
-            resp = requests.get(ws_url, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            logger.warning("[%s] HTTP error fetching %s: %s", f"{ticker}.{exchange}", ws_url, e)
-            return
+        if test_mode == "ci":
+            if data_type == "intraday":
+                data = [
+                    {
+                        "timestamp": 1751463000,
+                        "gmtoffset": 0,
+                        "datetime": "2025-07-02 13:30:00",
+                        "open": 617.23999,
+                        "high": 618.71997,
+                        "low": 616.609985,
+                        "close": 618.599975,
+                        "volume": 11824245,
+                    }
+                ]
+            elif data_type == "interday":
+                data = [
+                    {
+                        "date": "2024-10-25",
+                        "open": 534.65,
+                        "high": 537.2601,
+                        "low": 531.414,
+                        "close": 532.26,
+                        "adjusted_close": 527.1013,
+                        "volume": 4327190,
+                    }
+                ]
+        else:
+            try:
+                resp = requests.get(ws_url, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                logger.warning("[%s] HTTP error fetching %s: %s", f"{ticker}.{exchange}", ws_url, e)
+                return
 
         if isinstance(data, list):
             for row in data:
@@ -66,6 +129,15 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
     def start_historical_task(self, command: dict):
         TEST_SERVICES = os.getenv("TEST_SERVICES", "0") == "1"
+        TEST_CI = os.getenv("TEST_CI", "0") == "1"
+
+        assert not (TEST_SERVICES and TEST_CI), "TEST_SERVICES and TEST_CI cannot both be enabled at the same time"
+
+        test_mode = "false"
+        if TEST_SERVICES:
+            test_mode = "local"
+        elif TEST_CI:
+            test_mode = "ci"
 
         required_keys = ["ticker", "exchange", "interval", "start", "end"]
         for key in required_keys:
@@ -105,4 +177,4 @@ class EODHDHistoricalService(AbstractHistoricalService):
 
         logger.info("Prepared historical task: type=%s ticker=%s interval=%s", data_type, ticker_exch, interval)
 
-        self._fetch_data(url, data_type, exchange, ticker, interval, TEST_SERVICES)
+        self._fetch_data(url, data_type, exchange, ticker, interval, test_mode)
