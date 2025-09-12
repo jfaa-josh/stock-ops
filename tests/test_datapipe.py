@@ -1,4 +1,3 @@
-import faulthandler
 import importlib
 import sys
 from contextlib import contextmanager
@@ -46,13 +45,8 @@ def _sys_path(path: Path):
 @pytest.mark.timeout(150, method="thread")
 @pytest.mark.parametrize("modpath, funcname", ENTRYPOINTS, ids=lambda x: x if isinstance(x, str) else x[0])
 def test_entrypoints_run_clean(project_root: Path, modpath, funcname):
-    faulthandler.enable(file=sys.stderr, all_threads=True)
-    faulthandler.dump_traceback_later(145, repeat=False)  # fires just before the 150s timeout
-    try:
-        with _sys_path(project_root):
-            mod = importlib.import_module(modpath)
-            ret = getattr(mod, funcname)()
-            exit_code = int(ret) if isinstance(ret, int) else 0
-            assert exit_code == 0
-    finally:
-        faulthandler.cancel_dump_traceback_later()
+    with _sys_path(project_root):
+        mod = importlib.import_module(modpath)
+        ret = getattr(mod, funcname)()
+        exit_code = int(ret) if isinstance(ret, int) else 0
+        assert exit_code == 0
