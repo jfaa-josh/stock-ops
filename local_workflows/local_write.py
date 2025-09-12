@@ -1,4 +1,4 @@
-import os, time, threading, ast, re, sys, faulthandler, platform, random, shutil
+import os, time, threading, ast, re, sys, faulthandler, platform, random, shutil, sqlite3
 from pathlib import Path, PurePath
 from typing import Tuple, Dict, Any
 import logging
@@ -174,7 +174,7 @@ def main():
             emit(payload)
 
             db_paths_seen.add(rewritten_path)
-            logger.info("db_path/table set for %s/%s", rewritten_path, table)
+            logger.info("db_path [table] set for %s [%s]", rewritten_path, table)
 
     # Arm only while waiting
     IS_WIN = platform.system() == "Windows"
@@ -227,6 +227,16 @@ def main():
     if any(not th.daemon for th in live if th is not threading.current_thread()):
         sys.stderr.write(">>> non-daemon threads remain; forcing exit (tests only)\n"); sys.stderr.flush()
         os._exit(0)
+
+    for path in db_paths_seen:
+        if os.path.isfile(path):
+            with sqlite3.connect(path) as c:
+                rows = c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+                log_str = "OK" if rows and any(c.execute(f"SELECT 1 FROM {t[0]} LIMIT 1").fetchone() for t in rows) else "EMPTY"
+                logger.info("File is %s at path: %s", log_str, path)
+                print(path, )
+        else:
+            logger.info("File missing at path: %s", path)
 
     logger.info("Writer test completed successfully!\n")
 
