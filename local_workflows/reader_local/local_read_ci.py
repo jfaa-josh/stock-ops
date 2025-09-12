@@ -9,12 +9,6 @@ from stockops.config import config
 logger = logging.getLogger(__name__)
 
 def main():
-    # Logging setup
-    logging.basicConfig(
-        level=logging.INFO,  # or DEBUG
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
-
     # Static
     provider = "EODHD"
     exchange = "US"

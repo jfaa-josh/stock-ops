@@ -16,12 +16,6 @@ script = repo_root / "datapipe_ui" / "frontend.py"
 os.environ["TEST_MODE"] = "1"
 
 def main():
-    # Logging setup
-    logging.basicConfig(
-        level=logging.INFO,  # or DEBUG
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
-
     def get_command(command_type: str) -> dict[str, Any]:
         if command_type == "stream_trades":
             return {"stream_type": "trades", "tickers": 'SPY', 'exchange': 'US', "duration": 20}

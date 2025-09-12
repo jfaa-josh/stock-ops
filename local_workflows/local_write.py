@@ -24,12 +24,6 @@ os.environ["BUFFER_TRIM_MAXLEN"] = "100000"
 writer_mod, emit = import_locals()
 
 def main():
-    # Logging setup
-    logging.basicConfig(
-        level=logging.INFO,  # or DEBUG
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
-
     def make_test_data_txt():
         """
         NOTE: xformer_out_test_data.txt contains:

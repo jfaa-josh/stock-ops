@@ -29,15 +29,6 @@ def run_controller_task(command: Dict[str, Any], command_type: str, provider: st
         logger.exception("Controller task failed for command: %s", command)
         raise
 
-def setup_logging():
-    # Logging setup
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
-        force=True,
-    )
-
 def controller_driver_flow(
     command: Dict[str, Any],
     command_type: str,
@@ -48,6 +39,14 @@ def controller_driver_flow(
     run_controller_task(command, command_type, provider)
 
 def test_local():
+    # Logging setup
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,
+    )
+
     os.environ["TEST_SERVICES"] = "1" # Set to 1 print API call output rather than write
     provider = 'EODHD'
 
@@ -66,8 +65,6 @@ def test_ci():
     os.environ['TEST_CI'] = '1' # No actual API call made
     provider = 'EODHD'
 
-    setup_logging()
-
     for command, command_type in [
         ({'ticker': 'SPY', 'exchange': 'US', 'interval': '1h', 'start': '2025-07-02 09:30', 'end': '2025-07-03 16:00'},
         'fetch_historical'),
@@ -81,6 +78,4 @@ def test_ci():
         controller_driver_flow(command, command_type, provider)
 
 if __name__ == "__main__":
-    setup_logging()
-
     test_local()
