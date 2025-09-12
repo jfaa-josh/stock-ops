@@ -1,4 +1,4 @@
-import os, time, threading, ast, re, sys, faulthandler, platform, random
+import os, time, threading, ast, re, sys, faulthandler, platform, random, shutil
 from pathlib import Path, PurePath
 from typing import Tuple, Dict, Any
 import logging
@@ -72,15 +72,22 @@ def main():
         finally:
             sys.settrace(None)
 
-    def clear_directory(dir_path: Path):
+    def clear_directory(dir_path: Path) -> None:
         """
         Delete all files from the given directory, but keep the directory itself.
+        If directory does not exist, create it.
         """
-        if dir_path.exists() and dir_path.is_dir():
-            logger.info("dir_path %s exists; clearing any files", dir_path)
-            for file in dir_path.iterdir():
-                if file.is_file():
-                    file.unlink()  # deletes the file
+        if dir_path.exists() and not dir_path.is_dir():
+            raise NotADirectoryError(f"{dir_path} exists but is not a directory")
+
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+        logger.info("dir_path %s ready; clearing any files", dir_path)
+        for p in dir_path.iterdir():
+            if p.is_dir():
+                shutil.rmtree(p)
+            else:
+                p.unlink(missing_ok=True)
 
     def parse_payload(s: str) -> Tuple[str, str, Dict[str, Any]]:
         s2 = re.sub(r"(?:WindowsPath|PosixPath)\((['\"])(.*?)\1\)", r"'\2'", s)
