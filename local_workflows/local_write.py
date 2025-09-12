@@ -95,9 +95,16 @@ def main():
         return d["db_path"], d["table"], d["row"]
 
     def dbs_quiescent(paths, quiet_secs=2.0):
+        def with_sidecars(p: Path):
+            # Track WAL/SHM alongside *.db to avoid false “non-quiet”
+            return [p, p.with_suffix(p.suffix + "-wal"), p.with_suffix(p.suffix + "-shm")]
+
         def snap():
             m = {}
+            to_check = []
             for p in paths:
+                to_check.extend(with_sidecars(p))
+            for p in to_check:
                 try:
                     st = os.stat(p)
                     m[p] = (True, st.st_mtime, st.st_size)
@@ -109,7 +116,8 @@ def main():
         s2 = snap()
         if s1 != s2:
             sys.stderr.write(">>> dbs not quiet; diffs:\n"); sys.stderr.flush()
-            for p in paths:
+
+            for p in sorted(set(list(s1.keys()) + list(s2.keys()))):
                 if s1.get(p) != s2.get(p):
                     sys.stderr.write(f"    {p}: {s1.get(p)} -> {s2.get(p)}\n"); sys.stderr.flush()
         return s1 == s2
@@ -136,7 +144,7 @@ def main():
         # Take everything after the anchor directory (including the filename)
         idx = p.parts.index(s)
 
-        file_name = str(*p.parts[idx + 1 :])
+        file_name = "/".join(p.parts[idx + 1 :])  # robust join
         return root_dir / file_name
 
     # Clear existing outputs and generate input test data
@@ -225,8 +233,8 @@ def main():
 
     # If some non-daemon threads persist, avoid CI hangs:
     if any(not th.daemon for th in live if th is not threading.current_thread()):
-        sys.stderr.write(">>> non-daemon threads remain; forcing exit (tests only)\n"); sys.stderr.flush()
-        os._exit(0)
+        sys.stderr.write(">>> non-daemon threads remain; ending test without hard-exit\n"); sys.stderr.flush()
+        return
 
     logger.info("Writer test completed successfully!\n")
 
