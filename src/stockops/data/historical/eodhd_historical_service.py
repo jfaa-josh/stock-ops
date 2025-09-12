@@ -34,9 +34,9 @@ class EODHDHistoricalService(AbstractHistoricalService):
         db_path = Path(config.RAW_HISTORICAL_DIR) / str(filename)
 
         if test_mode == "false":
-            print({"db_path": db_path, "table": table_name, "row": transformed_row})
-        elif test_mode == "local":
             emit({"db_path": db_path, "table": table_name, "row": transformed_row})
+        elif test_mode == "local":
+            print({"db_path": db_path, "table": table_name, "row": transformed_row})
         elif test_mode == "ci":
             if data_type == "intraday":
                 expected = [

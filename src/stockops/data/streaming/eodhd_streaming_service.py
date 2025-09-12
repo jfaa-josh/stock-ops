@@ -30,9 +30,9 @@ class EODHDStreamingService(AbstractStreamingService):
         db_path = Path(config.RAW_STREAMING_DIR) / str(filename)
 
         if test_mode == "false":
-            print({"db_path": db_path, "table": table_name, "row": transformed_row})
-        elif test_mode == "local":
             emit({"db_path": db_path, "table": table_name, "row": transformed_row})
+        elif test_mode == "local":
+            print({"db_path": db_path, "table": table_name, "row": transformed_row})
         elif test_mode == "ci":
             if data_type == "streaming_trades":
                 expected = [("timestamp_UTC_ms", int), ("price", float), ("volume", int)]
@@ -113,6 +113,19 @@ class EODHDStreamingService(AbstractStreamingService):
             transformed_row = transform(data)
             self.write_data(table_name, exchange, transformed_row, test_mode, data_type)
 
+        mock_message: str = ""
+        if test_mode == "ci":
+            if data_type == "streaming_trades":
+                mock_message = '{"s":"SPY","p":657.5311,"v":5,"e":14,"c":[37],"dp":false,"t":1757623532850}'
+            elif data_type == "streaming_quotes":
+                mock_message = '{"s":"SPY","ap":657.6079,"as":5,"bp":657.5421,"bs":6,"t":1757623905553}'
+            else:
+                raise ValueError(f"Unsupported data_type in CI: {data_type}")
+            data = json.loads(mock_message)
+
+            process_parsed(data, mock_message, data_type)
+            return  # Avoid falling into the live loop in ci mode
+
         while True:
             # Global duration gate
             tl = time_left()
@@ -163,32 +176,19 @@ class EODHDStreamingService(AbstractStreamingService):
                         if buf_raw is not None and isinstance(buf_parsed, dict):
                             process_parsed(buf_parsed, buf_raw, data_type)
 
-                        mock_message: str = ""
-                        if test_mode == "ci":
-                            if data_type == "streaming_trades":
-                                mock_message = (
-                                    '{"s":"SPY","p":657.5311,"v":5,"e":14,"c":[37],"dp":false,"t":1757623532850}'
+                        # Main stream loop
+                        async for message in websocket:
+                            try:
+                                data = json.loads(message)
+                            except json.JSONDecodeError:
+                                safe = (
+                                    message.decode("utf-8", errors="replace")
+                                    if isinstance(message, (bytes | bytearray))
+                                    else str(message)
                                 )
-                            elif data_type == "streaming_quotes":
-                                mock_message = '{"s":"SPY","ap":657.6079,"as":5,"bp":657.5421,"bs":6,"t":1757623905553}'
-                            data = json.loads(mock_message)
-
-                            process_parsed(data, mock_message, data_type)
-                            return  # Avoid falling into the live loop in ci mode
-                        else:
-                            # Main stream loop
-                            async for message in websocket:
-                                try:
-                                    data = json.loads(message)
-                                except json.JSONDecodeError:
-                                    safe = (
-                                        message.decode("utf-8", errors="replace")
-                                        if isinstance(message, (bytes | bytearray))
-                                        else str(message)
-                                    )
-                                    logger.warning("[%s] Non-JSON message: %s", table_name, safe)
-                                    continue
-                                process_parsed(data, message, data_type)
+                                logger.warning("[%s] Non-JSON message: %s", table_name, safe)
+                                continue
+                            process_parsed(data, message, data_type)
 
                     if tl and tl > 0:
                         # Only apply timeout if we actually have a time budget
