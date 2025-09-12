@@ -188,11 +188,11 @@ def main():
         writer_mod.request_stop()
         time.sleep(0.05)  # tiny head start for the wake xadd
 
-    faulthandler.enable(file=sys.stderr, all_threads=not IS_WIN)
-
-    # avoid dump_traceback_later on Windows (it always dumps all threads)
-    if not IS_WIN:
-        faulthandler.dump_traceback_later(15, repeat=False)
+    try:
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            faulthandler.enable(file=sys.stderr, all_threads=not IS_WIN)
+    except Exception:
+        logger.debug("faulthandler.enable skipped (already enabled or unsupported)")
 
     sys.stderr.write(">>> entering quiescence wait\n"); sys.stderr.flush()
     logger.info("Entering quiescence wait\n")
@@ -210,20 +210,9 @@ def main():
             break
         time.sleep(0.2)
 
-    # cancel any pending delayed dump now that we're done waiting
-    if not IS_WIN:
-        faulthandler.cancel_dump_traceback_later()
-
     # --- attempt to finish the writer thread (won't block because it's daemon) ---
-    t.join(timeout=5.0)
-
-    if not IS_WIN:
-        faulthandler.cancel_dump_traceback_later()
-
     logger.info("Joining writer thread")
     t.join(timeout=5.0)
-
-
 
     # --- diagnostics ---
     live = [th for th in threading.enumerate() if th.is_alive()]
@@ -231,9 +220,10 @@ def main():
     for th in live:
         print(f"name={th.name!r} ident={th.ident} daemon={th.daemon} alive={th.is_alive()}", flush=True)
 
-    print("\n=== Stacks of live threads ===", flush=True)
     # Final dump: avoid all_threads on Windows
-    faulthandler.dump_traceback(file=sys.stdout, all_threads=not IS_WIN)
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        print("\n=== Stacks of live threads ===", flush=True)
+        faulthandler.dump_traceback(file=sys.stdout, all_threads=not IS_WIN)
 
     # If some non-daemon threads persist, avoid CI hangs:
     if any(not th.daemon for th in live if th is not threading.current_thread()):
