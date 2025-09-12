@@ -228,16 +228,6 @@ def main():
         sys.stderr.write(">>> non-daemon threads remain; forcing exit (tests only)\n"); sys.stderr.flush()
         os._exit(0)
 
-    for path in db_paths_seen:
-        if os.path.isfile(path):
-            with sqlite3.connect(path) as c:
-                rows = c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-                log_str = "OK" if rows and any(c.execute(f"SELECT 1 FROM {t[0]} LIMIT 1").fetchone() for t in rows) else "EMPTY"
-                logger.info("File is %s at path: %s", log_str, path)
-                print(path, )
-        else:
-            logger.info("File missing at path: %s", path)
-
     logger.info("Writer test completed successfully!\n")
 
 if __name__ == "__main__":
