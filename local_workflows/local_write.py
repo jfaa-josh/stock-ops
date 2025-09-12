@@ -94,9 +94,8 @@ def main():
         d = ast.literal_eval(s2)  # safe: only literals after substitution
         return d["db_path"], d["table"], d["row"]
 
-    def dbs_quiescent(paths, quiet_secs=2.0):
+    def dbs_quiescent(paths, quiet_secs=0.5):
         def with_sidecars(p: Path):
-            # Track WAL/SHM alongside *.db to avoid false “non-quiet”
             return [p, p.with_suffix(p.suffix + "-wal"), p.with_suffix(p.suffix + "-shm")]
 
         def snap():
@@ -111,15 +110,12 @@ def main():
                 except FileNotFoundError:
                     m[p] = (False, 0.0, 0)
             return m
+
         s1 = snap()
         time.sleep(quiet_secs)
         s2 = snap()
         if s1 != s2:
-            sys.stderr.write(">>> dbs not quiet; diffs:\n"); sys.stderr.flush()
-
-            for p in sorted(set(list(s1.keys()) + list(s2.keys()))):
-                if s1.get(p) != s2.get(p):
-                    sys.stderr.write(f"    {p}: {s1.get(p)} -> {s2.get(p)}\n"); sys.stderr.flush()
+            logger.warning("dbs_quiescent failed; diffs: %s", {p: (s1.get(p), s2.get(p)) for p in set(s1.keys()) | set(s2.keys()) if s1.get(p) != s2.get(p)})
         return s1 == s2
 
     def rewrite_db_path(input_path: str) -> Path:
@@ -202,14 +198,14 @@ def main():
     logger.info("Entering quiescence wait\n")
 
     # --- bounded quiescence wait ---
-    deadline = time.monotonic() + 60.0  # 60s cap
+    logger.info("Entering quiescence wait")
+    deadline = time.monotonic() + 20.0  # 60s cap
     while t.is_alive():
-        if thread_idle(t, idle_secs=2.0) and dbs_quiescent(db_paths_seen, quiet_secs=2.0):
+        condition = thread_idle(t, idle_secs=2.0) and (dbs_quiescent(db_paths_seen, quiet_secs=0.5))
+        if condition:
             break
         if time.monotonic() >= deadline:
-            sys.stderr.write(">>> quiescence wait timed out\n"); sys.stderr.flush()
-            logger.warning("Quiescence wait timed out\n")
-            # one debug pass to show which file(s) keep changing
+            logger.warning("Quiescence wait timed out")
             dbs_quiescent(db_paths_seen, quiet_secs=0.5)
             break
         time.sleep(0.2)
@@ -219,7 +215,15 @@ def main():
         faulthandler.cancel_dump_traceback_later()
 
     # --- attempt to finish the writer thread (won't block because it's daemon) ---
-    t.join(timeout=1.0)
+    t.join(timeout=5.0)
+
+    if not IS_WIN:
+        faulthandler.cancel_dump_traceback_later()
+
+    logger.info("Joining writer thread")
+    t.join(timeout=5.0)
+
+
 
     # --- diagnostics ---
     live = [th for th in threading.enumerate() if th.is_alive()]
