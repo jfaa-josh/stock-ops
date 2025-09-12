@@ -93,7 +93,10 @@ testpaths = ["tests"]
 markers = ["integration: marks integration tests"]
 
 # sensible defaults so don't need to pass them at command
-addopts = "-m integration -rA --full-trace --durations=0"
+addopts = """
+-m integration -rA --full-trace --durations=0
+--capture=tee-sys
+"""
 
 # make pytest stream logs live to the console
 log_cli = true
