@@ -43,7 +43,7 @@ def _sys_path(path: Path):
                 pass
 
 
-@pytest.mark.timeout(150, method="thread", reraise=True)
+@pytest.mark.timeout(150, method="thread")
 @pytest.mark.parametrize("modpath, funcname", ENTRYPOINTS, ids=lambda x: x if isinstance(x, str) else x[0])
 def test_entrypoints_run_clean(project_root: Path, modpath, funcname):
     faulthandler.enable(file=sys.stderr, all_threads=True)
