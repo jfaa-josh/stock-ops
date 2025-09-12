@@ -139,6 +139,7 @@ def main():
             emit(payload)
 
             db_paths_seen.add(Path(path_str))
+            logger.info("db_path/table set for %s/%s", Path(path_str), table)
 
     # Arm only while waiting
     IS_WIN = platform.system() == "Windows"
