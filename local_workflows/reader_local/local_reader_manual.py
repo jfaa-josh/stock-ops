@@ -1,20 +1,21 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import subprocess
 
 from stockops.data.database.reader import ReadProcess
+
 
 # Static
 provider = "EODHD"
 exchange = "US"
 
-def run(provider, data_type, exchange, ticker, interval, start_date, end_date):
+def run(provider, exchange, *, data_type, ticker, interval, start_date, end_date):
     reader = ReadProcess(provider, data_type, exchange)
     data = reader.read_sql(ticker, interval, start_date, end_date)
     return reader.get_df(data)
 
 # Command to run inside WSL TO copy database
 ############################################
+# import subprocess
 # cmd = [
 #     "wsl", "docker", "cp",
 #     "stockops-writer-service-1:/app/data/raw",
@@ -52,56 +53,39 @@ def run(provider, data_type, exchange, ticker, interval, start_date, end_date):
 
 
 
-
-
 # DAILY:
-data_type = "historical_interday"
+daily = {'data_type': "historical_interday",
+              'start_date': '2025-07-01',
+              'end_date': '2025-08-21',
+              'ticker': 'SPY',
+              'interval': 'd'
+              }
 
-start_date = '2025-07-01'
-end_date = '2025-08-21'
+df_day = run(provider, exchange, **daily)
 
-ticker = 'SPY'
-interval = 'd'
-
-#### I NEED TO GET TS_COL OUT OF THE RETURN FUNCTION HERE
-df_day = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
+print(df_day.head())
 
 # HOURLY:
-data_type = "historical_intraday"
+hourly = {'data_type': "historical_intraday",
+              'start_date': '2025-07-01 09:30',
+              'end_date': '2025-09-21 16:00',
+              'ticker': 'SPY',
+              'interval': '1h'
+              }
 
-start_date = '2025-07-01 09:30'
-end_date = '2025-09-21 16:00'
-
-ticker = 'SPY'
-interval = '1h'
-
-df_hr = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
+df_hr = run(provider, exchange, **hourly)
 
 print(df_hr.head())
 
-# # Minutely:
-# data_type = "historical_intraday"
+# STREAMING:
+stream = {'data_type': "streaming",
+              'start_date': '2025-08-02 09:30',
+              'end_date': '2025-09-21 16:00',
+              'ticker': 'SPY',
+              'interval': None
+              }
 
-# start_date = '2025-08-02 09:30'
-# end_date = '2025-09-21 16:00'
-
-# ticker = 'SPY'
-# interval = '1m'
-
-# df_min = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
-
-# print(df_min.head())
-
-# Streaming:
-data_type = "streaming"
-
-start_date = '2025-08-02 09:30'
-end_date = '2025-09-21 16:00'
-
-ticker = 'SPY'
-interval = None
-
-df_stream = run(provider, data_type, exchange, ticker, interval, start_date, end_date)
+df_stream = run(provider, exchange, **stream)
 
 print(df_stream.head())
 

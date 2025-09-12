@@ -1,135 +1,135 @@
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751477400, 'open': 619.46997, 'high': 619.71997, 'low': 619.22998, 'close': 619.590026, 'volume': 6646497, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664844, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667647, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751560200, 'open': None, 'high': None, 'low': None, 'close': None, 'volume': None, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651499, 'ask_price': 643.2, 'bid_price': 643.1931, 'ask_size': 5, 'bid_size': 5}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668071, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-29', 'open': 533.12, 'high': 535.82, 'low': 531.75, 'close': 534.77, 'adjusted_close': 529.587, 'volume': 3027611, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651141, 'ask_price': 643.2025, 'bid_price': 643.1993, 'ask_size': 2, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651074, 'price': 643.155, 'volume': 10}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751481000, 'open': 619.580017, 'high': 620.169982, 'low': 619.575012, 'close': 619.760009, 'volume': 7702106, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664225, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751477400, 'open': 619.46997, 'high': 619.71997, 'low': 619.22998, 'close': 619.590026, 'volume': 6646497, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751484600, 'open': 619.75, 'high': 620.47998, 'low': 619.609985, 'close': 620.369995, 'volume': 10199323, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-11-01', 'open': 525.16, 'high': 529.08, 'low': 524.5401, 'close': 524.94, 'adjusted_close': 519.8523, 'volume': 6106942, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526659602, 'ask_price': 643.2094, 'bid_price': 643.1995, 'ask_size': 12, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651074, 'price': 643.155, 'volume': 10}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664418, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-11-04', 'open': 525.06, 'high': 526.28, 'low': 522.0301, 'close': 523.8, 'adjusted_close': 518.7233, 'volume': 3681461, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-28', 'open': 535.53, 'high': 535.57, 'low': 533.6708, 'close': 533.92, 'adjusted_close': 528.7452, 'volume': 3407971, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526669776, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 4, 'bid_size': 5}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662697, 'ask_price': 643.2001, 'bid_price': 643.19, 'ask_size': 7, 'bid_size': 4}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526659602, 'ask_price': 643.2094, 'bid_price': 643.1995, 'ask_size': 12, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751466600, 'open': 618.599975, 'high': 619.164978, 'low': 618.200012, 'close': 618.789978, 'volume': 8718458, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668182, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526663732, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 4}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662321, 'ask_price': 643.2074, 'bid_price': 643.1924, 'ask_size': 12, 'bid_size': 6}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651418, 'ask_price': 643.2001, 'bid_price': 643.1962, 'ask_size': 5, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-29', 'open': 533.12, 'high': 535.82, 'low': 531.75, 'close': 534.77, 'adjusted_close': 529.587, 'volume': 3027611, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526663490, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 7, 'bid_size': 4}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651499, 'ask_price': 643.2, 'bid_price': 643.1931, 'ask_size': 5, 'bid_size': 5}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651141, 'ask_price': 643.2025, 'bid_price': 643.1993, 'ask_size': 2, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662635, 'ask_price': 643.2005, 'bid_price': 643.1902, 'ask_size': 4, 'bid_size': 6}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-31', 'open': 529.09, 'high': 529.23, 'low': 522.51, 'close': 522.67, 'adjusted_close': 517.6043, 'volume': 7972774, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751463000, 'open': 617.23999, 'high': 618.71997, 'low': 616.609985, 'close': 618.599975, 'volume': 11824245, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526658216, 'ask_price': 643.205, 'bid_price': 643.1958, 'ask_size': 12, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667788, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'SPY', 'row': {'date': '2024-11-04', 'open': 525.06, 'high': 526.28, 'low': 522.0301, 'close': 523.8, 'adjusted_close': 518.7233, 'volume': 3681461, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526658216, 'ask_price': 643.205, 'bid_price': 643.1958, 'ask_size': 12, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664782, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-28', 'open': 535.53, 'high': 535.57, 'low': 533.6708, 'close': 533.92, 'adjusted_close': 528.7452, 'volume': 3407971, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526659477, 'ask_price': 643.2088, 'bid_price': 643.1989, 'ask_size': 12, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751562000, 'open': 625.72998, 'high': 626.280029, 'low': 620.515625, 'close': 624.98999, 'volume': None, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651538, 'ask_price': 643.2, 'bid_price': 643.1916, 'ask_size': 3, 'bid_size': 5}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651398, 'ask_price': 643.2002, 'bid_price': 643.1925, 'ask_size': 5, 'bid_size': 4}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662635, 'ask_price': 643.2005, 'bid_price': 643.1902, 'ask_size': 4, 'bid_size': 6}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662434, 'ask_price': 643.2019, 'bid_price': 643.1906, 'ask_size': 2, 'bid_size': 6}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526670499, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 3, 'bid_size': 5}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526663732, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 4}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667788, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662524, 'ask_price': 643.2009, 'bid_price': 643.1903, 'ask_size': 3, 'bid_size': 6}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651074, 'ask_price': 643.205, 'bid_price': 643.1985, 'ask_size': 1, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526663490, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 7, 'bid_size': 4}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751470200, 'open': 618.789978, 'high': 619.455017, 'low': 618.73999, 'close': 619.155029, 'volume': 5896295, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751549400, 'open': 622.450012, 'high': 625.109985, 'low': 622.429992, 'close': 625, 'volume': 16305435, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526670499, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 3, 'bid_size': 5}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'SPY', 'row': {'date': '2024-11-04', 'open': 525.06, 'high': 526.28, 'low': 522.0301, 'close': 523.8, 'adjusted_close': 518.7233, 'volume': 3681461, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651312, 'ask_price': 643.2003, 'bid_price': 643.1949, 'ask_size': 5, 'bid_size': 6}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651270, 'ask_price': 643.2006, 'bid_price': 643.1998, 'ask_size': 5, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662321, 'ask_price': 643.2074, 'bid_price': 643.1924, 'ask_size': 12, 'bid_size': 6}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751470200, 'open': 618.789978, 'high': 619.455017, 'low': 618.73999, 'close': 619.155029, 'volume': 5896295, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667293, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 7, 'bid_size': 3}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751473800, 'open': 619.159973, 'high': 619.674987, 'low': 619, 'close': 619.47998, 'volume': 7640261, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751549400, 'open': 622.450012, 'high': 625.109985, 'low': 622.429992, 'close': 625, 'volume': 16305435, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664418, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-25', 'open': 534.65, 'high': 537.2601, 'low': 531.414, 'close': 532.26, 'adjusted_close': 527.1013, 'volume': 4327190, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751556600, 'open': 625.419982, 'high': 626.080017, 'low': 625.359985, 'close': 625.734985, 'volume': 9030686, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751481000, 'open': 619.580017, 'high': 620.169982, 'low': 619.575012, 'close': 619.760009, 'volume': 7702106, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651312, 'ask_price': 643.2003, 'bid_price': 643.1949, 'ask_size': 5, 'bid_size': 6}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751486400, 'open': 620.450012, 'high': 620.450012, 'low': 620.450012, 'close': 620.450012, 'volume': None, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651203, 'ask_price': 643.2012, 'bid_price': 643.1996, 'ask_size': 4, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668071, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667647, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662387, 'ask_price': 643.2037, 'bid_price': 643.1912, 'ask_size': 1, 'bid_size': 6}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662657, 'ask_price': 643.2002, 'bid_price': 643.1901, 'ask_size': 5, 'bid_size': 6}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526571834, 'price': 643.155, 'volume': 10}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526658258, 'ask_price': 643.2075, 'bid_price': 643.1979, 'ask_size': 12, 'bid_size': 2}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668182, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526670499, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 3, 'bid_size': 5}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751556600, 'open': 625.419982, 'high': 626.080017, 'low': 625.359985, 'close': 625.734985, 'volume': 9030686, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668755, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 5, 'bid_size': 5}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651270, 'ask_price': 643.2006, 'bid_price': 643.1998, 'ask_size': 5, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662387, 'ask_price': 643.2037, 'bid_price': 643.1912, 'ask_size': 1, 'bid_size': 6}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-11-04', 'open': 525.06, 'high': 526.28, 'low': 522.0301, 'close': 523.8, 'adjusted_close': 518.7233, 'volume': 3681461, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668712, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 5, 'bid_size': 3}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526572497, 'price': 643.155, 'volume': 10}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651418, 'ask_price': 643.2001, 'bid_price': 643.1962, 'ask_size': 5, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662678, 'ask_price': 643.2001, 'bid_price': 643.19, 'ask_size': 5, 'bid_size': 4}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662697, 'ask_price': 643.2001, 'bid_price': 643.19, 'ask_size': 7, 'bid_size': 4}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662524, 'ask_price': 643.2009, 'bid_price': 643.1903, 'ask_size': 3, 'bid_size': 6}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526670499, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 3, 'bid_size': 5}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526573891, 'price': 643.155, 'volume': 11}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664225, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751553000, 'open': 625, 'high': 625.784973, 'low': 624.789978, 'close': 625.419982, 'volume': 9078995, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751484600, 'open': 619.75, 'high': 620.47998, 'low': 619.609985, 'close': 620.369995, 'volume': 10199323, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526669776, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 4, 'bid_size': 5}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-31', 'open': 529.09, 'high': 529.23, 'low': 522.51, 'close': 522.67, 'adjusted_close': 517.6043, 'volume': 7972774, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668712, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 5, 'bid_size': 3}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-30', 'open': 534.35, 'high': 536.2, 'low': 532.59, 'close': 533.16, 'adjusted_close': 527.9926, 'volume': 3067015, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751562000, 'open': 625.72998, 'high': 626.280029, 'low': 620.515625, 'close': 624.98999, 'volume': None, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-25', 'open': 534.65, 'high': 537.2601, 'low': 531.414, 'close': 532.26, 'adjusted_close': 527.1013, 'volume': 4327190, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651398, 'ask_price': 643.2002, 'bid_price': 643.1925, 'ask_size': 5, 'bid_size': 4}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664247, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662434, 'ask_price': 643.2019, 'bid_price': 643.1906, 'ask_size': 2, 'bid_size': 6}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526659864, 'ask_price': 643.2097, 'bid_price': 643.1997, 'ask_size': 12, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526668755, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 5, 'bid_size': 5}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526572497, 'price': 643.155, 'volume': 10}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-30', 'open': 534.35, 'high': 536.2, 'low': 532.59, 'close': 533.16, 'adjusted_close': 527.9926, 'volume': 3067015, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662187, 'ask_price': 643.2048, 'bid_price': 643.1949, 'ask_size': 7, 'bid_size': 4}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662187, 'ask_price': 643.2048, 'bid_price': 643.1949, 'ask_size': 7, 'bid_size': 4}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526575999, 'price': 643.155, 'volume': 10}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-11-01', 'open': 525.16, 'high': 529.08, 'low': 524.5401, 'close': 524.94, 'adjusted_close': 519.8523, 'volume': 6106942, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651538, 'ask_price': 643.2, 'bid_price': 643.1916, 'ask_size': 3, 'bid_size': 5}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662657, 'ask_price': 643.2002, 'bid_price': 643.1901, 'ask_size': 5, 'bid_size': 6}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526662678, 'ask_price': 643.2001, 'bid_price': 643.19, 'ask_size': 5, 'bid_size': 4}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751473800, 'open': 619.159973, 'high': 619.674987, 'low': 619, 'close': 619.47998, 'volume': 7640261, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526659477, 'ask_price': 643.2088, 'bid_price': 643.1989, 'ask_size': 12, 'bid_size': 1}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664844, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664782, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526664247, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 2}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751466600, 'open': 618.599975, 'high': 619.164978, 'low': 618.200012, 'close': 618.789978, 'volume': 8718458, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651203, 'ask_price': 643.2012, 'bid_price': 643.1996, 'ask_size': 4, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-29', 'open': 535.00, 'high': 535.82, 'low': 531.75, 'close': 534.77, 'adjusted_close': 529.587, 'volume': 3027611, 'interval': 'd'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667604, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751553000, 'open': 625, 'high': 625.784973, 'low': 624.789978, 'close': 625.419982, 'volume': 9078995, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526658258, 'ask_price': 643.2075, 'bid_price': 643.1979, 'ask_size': 12, 'bid_size': 2}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667293, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 7, 'bid_size': 3}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_interday_EODHD_US.db'), 'table': 'VOO', 'row': {'date': '2024-10-29', 'open': 535.00, 'high': 535.82, 'low': 531.75, 'close': 534.77, 'adjusted_close': 529.587, 'volume': 3027611, 'interval': 'd'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526573891, 'price': 643.155, 'volume': 11}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751463000, 'open': 617.23999, 'high': 618.71997, 'low': 616.609985, 'close': 618.599975, 'volume': 11824245, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751486400, 'open': 620.450012, 'high': 620.450012, 'low': 620.450012, 'close': 620.450012, 'volume': None, 'interval': '1h'}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/historical/historical_intraday_EODHD_US_2025_JUL.db'), 'table': 'SPY', 'row': {'timestamp_UTC_s': 1751560200, 'open': None, 'high': None, 'low': None, 'close': None, 'volume': None, 'interval': '1h'}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526571834, 'price': 643.155, 'volume': 10}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526575999, 'price': 643.155, 'volume': 10}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526667604, 'ask_price': 643.2, 'bid_price': 643.19, 'ask_size': 8, 'bid_size': 3}}
 
-{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/git_lfs/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526659864, 'ask_price': 643.2097, 'bid_price': 643.1997, 'ask_size': 12, 'bid_size': 1}}
+{'db_path': WindowsPath('C:/Python Repositories/Backed Up to Git/stocks-ops/data/test_data/streaming/streaming_EODHD_US_2025_AUG_18.db'), 'table': 'SPY', 'row': {'timestamp_UTC_ms': 1755526651074, 'ask_price': 643.205, 'bid_price': 643.1985, 'ask_size': 1, 'bid_size': 1}}
