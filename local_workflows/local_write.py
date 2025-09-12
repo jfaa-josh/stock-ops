@@ -1,5 +1,5 @@
 import os, time, threading, ast, re, sys, faulthandler, platform, random
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Tuple, Dict, Any
 import logging
 
@@ -77,6 +77,7 @@ def main():
         Delete all files from the given directory, but keep the directory itself.
         """
         if dir_path.exists() and dir_path.is_dir():
+            logger.info("dir_path %s exists; clearing any files", dir_path)
             for file in dir_path.iterdir():
                 if file.is_file():
                     file.unlink()  # deletes the file
@@ -106,6 +107,31 @@ def main():
                     sys.stderr.write(f"    {p}: {s1.get(p)} -> {s2.get(p)}\n"); sys.stderr.flush()
         return s1 == s2
 
+    def rewrite_db_path(input_path: str) -> Path:
+        """
+        Convert a stored Windows-style path to a Path under the current repo data roots.
+        Uses config.RAW_HISTORICAL_DIR and config.RAW_STREAMING_DIR as anchors.
+        """
+        p = PurePath(input_path.replace("\\", "/"))
+
+        s = None
+        if "streaming" in p.parts:
+            s = "streaming"
+            root_dir: Path = config.RAW_STREAMING_DIR
+        elif "historical" in p.parts:
+            s = "historical"
+            root_dir: Path = config.RAW_HISTORICAL_DIR
+        else:
+            raise ValueError(f"Neither 'historical' nor 'streaming' found in path: {input_path!r}")
+
+        assert root_dir.exists() and root_dir.is_dir(), f'Writer directory {root_dir} does not exist!'
+
+        # Take everything after the anchor directory (including the filename)
+        idx = p.parts.index(s)
+
+        file_name = str(*p.parts[idx + 1 :])
+        return root_dir / file_name
+
     # Clear existing outputs and generate input test data
     clear_directory(config.RAW_HISTORICAL_DIR)
     clear_directory(config.RAW_STREAMING_DIR)
@@ -130,16 +156,18 @@ def main():
                 continue
 
             path_str, table, row = parse_payload(line)
+            rewritten_path = rewrite_db_path(path_str)
 
             payload = {
-                "db_path": Path(path_str),
+                "db_path": str(rewritten_path),
                 "table": table,
                 "row": row,
             }
+
             emit(payload)
 
-            db_paths_seen.add(Path(path_str))
-            logger.info("db_path/table set for %s/%s", Path(path_str), table)
+            db_paths_seen.add(rewritten_path)
+            logger.info("db_path/table set for %s/%s", rewritten_path, table)
 
     # Arm only while waiting
     IS_WIN = platform.system() == "Windows"
