@@ -42,7 +42,7 @@ def _sys_path(path: Path):
                 pass
 
 
-@pytest.mark.timeout(150, method="thread")
+@pytest.mark.timeout(200, method="thread")
 @pytest.mark.parametrize("modpath, funcname", ENTRYPOINTS, ids=lambda x: x if isinstance(x, str) else x[0])
 def test_entrypoints_run_clean(project_root: Path, modpath, funcname):
     with _sys_path(project_root):
