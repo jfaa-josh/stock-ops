@@ -175,7 +175,8 @@ services:
     environment:
       <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api   # Prefect API URL for Streamlit to trigger flows
-      VERBOSE_LOGGING: "false"                         # Sets a variable in python streamlit_ui code to silence some logging ("true"/"false")
+      VERBOSE_LOGGING: "false"                        # Sets a variable in python streamlit_ui code to silence some logging ("true"/"false")
+      PYTHONPATH: /app:/app/src                       # Override .env's ./src to allow relative imports needed for pytest in code
     command: streamlit run datapipe_ui/frontend.py      # Launch the Streamlit application
 
 ###DATA PIPELINE OPTIONAL SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
