@@ -1,5 +1,6 @@
 import pandas as pd
-from pathlib import WindowsPath, Path
+from pathlib import Path
+import ast, re
 import logging
 
 from stockops.data.database.reader import ReadProcess
@@ -50,15 +51,19 @@ def main():
         # Parse test_data.txt to pd.dfs so they can be compared to reader output dfs
         test_data_path = config.DATA_RAW_DIR/'inputs'/'test_data.txt'
 
-        safe_globals = {"WindowsPath": WindowsPath}   # expose only what’s needed
+        winpath_call = re.compile(r"WindowsPath\((['\"])(.*?)\1\)")
         records = []
         with open(test_data_path, "r", encoding="utf-8") as f:
             for line in f:
-                if line.strip():
-                    d = eval(line.strip(), safe_globals, {})
-                    if isinstance(d.get("db_path"), Path):
-                        d["db_path"] = str(d["db_path"])
-                    records.append(d)
+                s = line.strip()
+                if not s:
+                    continue
+                # Replace WindowsPath('...') with '...'
+                s = winpath_call.sub(r"\1\2\1", s)
+                d = ast.literal_eval(s)  # safe parse
+                if isinstance(d.get("db_path"), Path):
+                    d["db_path"] = str(d["db_path"])
+                records.append(d)
 
         df_raw = pd.DataFrame([r["row"] | {"db_path": r["db_path"], "table": r["table"]}
                             for r in records])
