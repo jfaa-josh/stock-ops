@@ -23,7 +23,7 @@ COPY datapipe_ui/ ./datapipe_ui/
 COPY prefect/ ./prefect/
 
 # Copy the stockops subpackage bits
-COPY src/stockops/config/     /app/src/stockops/config/
+COPY src/stockops/config/     ./src/stockops/config/
 
 # Create a dummy __init__.py file to make stockops a package for partial copy to work
-RUN mkdir -p /app/src/stockops && :> /app/src/stockops/__init__.py
+RUN mkdir -p ./src/stockops && :> ./src/stockops/__init__.py

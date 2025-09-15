@@ -64,6 +64,7 @@ class ApiClient:
         timeout: Optional[Tuple[float, float]] = None,
         params: Optional[Mapping[str, Any]] = None,
         allow_redirects: bool = True,
+        verbose_logging: bool = True,
     ) -> Dict[str, Any]:
         """
         Wraps Prefect 3 Server API calls with sane defaults.
@@ -120,7 +121,7 @@ class ApiClient:
                 logger.info("API %s %s -> 204 No Content", method, url)
                 return {"status": 204, "ok": True, "no_content": True}
 
-            logger.info("API %s %s -> %s", method, url, resp.status_code)
+            if verbose_logging: logger.info("API %s %s -> %s", method, url, resp.status_code)
 
             # Prefer JSON if declared; fallback to text
             ctype = resp.headers.get("Content-Type", "")

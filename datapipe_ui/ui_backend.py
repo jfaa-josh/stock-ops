@@ -1,4 +1,4 @@
-from api_factory import ApiLike
+from datapipe_ui.api_factory import ApiLike
 from zoneinfo import ZoneInfo
 from typing import Iterable, Optional, Any, Dict, Tuple
 from datetime import datetime, date, time as dtime
@@ -6,7 +6,7 @@ import requests
 import time
 
 from stockops.config import utils as cfg_utils  # Add additional providers to config utils as needed
-from utils import norm_dep_status_value, derive_schedule_state_from_deployment
+from datapipe_ui.utils import norm_dep_status_value, derive_schedule_state_from_deployment
 
 class DeploymentService:
     def __init__(self, api: ApiLike, provider: str = "EODHD", mode: str = "hist"):
@@ -34,7 +34,7 @@ class DeploymentService:
         elif self.mode == "stream":
             return {
                 "tickers": cfg["ticker"], "exchange": cfg["exchange"],
-                "stream_type": cfg["stream_type"], "duration": int(cfg["duration"]),
+                "stream_type": cfg["stream_type"], "duration": float(cfg["duration"])*3600,
             }
         else:
             raise ValueError(f"Unsupported mode: {self.mode}")

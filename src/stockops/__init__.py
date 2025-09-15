@@ -5,7 +5,6 @@ import logging
 
 from . import config as config
 from . import data as data
-from . import deploy as deploy
 from . import mlflow_utils as mlflow_utils
 from . import model as model
 
@@ -20,7 +19,6 @@ __all__ = [
     "__version__",
     "config",
     "data",
-    "deploy",
     "mlflow_utils",
     "model",
 ]

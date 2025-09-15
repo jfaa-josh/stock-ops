@@ -2,18 +2,14 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 from dataclasses import dataclass, field
 from typing import Any, Literal, Tuple, Optional, List, Dict
-import sys
+import sys, string, uuid, os, random
 import logging
-import random
-import string
-import uuid
 import datetime as dt
-import os
 from zoneinfo import ZoneInfo
 
-from api_factory import ApiLike, make_api
-from ui_backend import DeploymentService
-from utils import summarize_schedules_for_ui, parse_times_csv
+from datapipe_ui.api_factory import ApiLike, make_api
+from datapipe_ui.ui_backend import DeploymentService
+from datapipe_ui.utils import summarize_schedules_for_ui, parse_times_csv
 
 # Logging setup
 logging.basicConfig(
@@ -126,15 +122,6 @@ class Section:
                 return uid
 
     def run_deployment(self, cfg) -> Tuple[str, str]:
-        if self.mode == "stream":
-            try:
-                duration_int = int(cfg.get("duration","").strip())
-                if duration_int <= 0:
-                    raise ValueError
-            except Exception:
-                st.error("Duration must be a positive integer.")
-                raise ValueError("Duration must be a positive integer.")
-
         fr_id, fr_name = self.svc.trigger_flow(cfg)
 
         st.success(f"Flow triggered: {fr_name}")
@@ -377,18 +364,21 @@ class Section:
             st.error("Please choose a DTSTART date and time.")
             return (True, None)
 
+        # Anchor boundary
+        dtstart_anchor = dt.datetime.combine(dtstart_date, dtstart_time)
+
+        if until_dt and until_dt <= dtstart_anchor:
+            st.error("UNTIL must be after DTSTART.")
+            return (True, None)
+
         if times is not None:
             # MULTI
             for t in times:
-                dtstart_local = dt.datetime.combine(dtstart_date, t)
-                if until_dt and until_dt <= dtstart_local:
-                    st.error("ALL UNTIL must be after DTSTART.")
-                    return (True, None)
                 try:
                     sched = self.svc.build_schedule(
                         timezone=tz_key,
                         freq=freq,
-                        dtstart_local=dtstart_local,
+                        dtstart_local=dtstart_anchor,
                         interval=int(interval),
                         byweekday=(monthly_byweekday if freq == "MONTHLY" and monthly_byweekday else byweekday),
                         bymonthday=bymonthday,
@@ -404,15 +394,11 @@ class Section:
                 schedules.append(sched)
         else:
             # SINGLE
-            dtstart_local = dt.datetime.combine(dtstart_date, dtstart_time)
-            if until_dt and until_dt <= dtstart_local:
-                st.error("UNTIL must be after DTSTART.")
-                return (True, None)
             try:
                 sched = self.svc.build_schedule(
                     timezone=tz_key,
                     freq=freq,
-                    dtstart_local=dtstart_local,
+                    dtstart_local=dtstart_anchor,
                     interval=int(interval),
                     byweekday=(monthly_byweekday if freq == "MONTHLY" and monthly_byweekday else byweekday),
                     bymonthday=bymonthday,
@@ -515,25 +501,25 @@ class Section:
                     key=f"{self.ns}_stream_type",
                 )
                 duration_text = st.text_input(
-                    "Duration (seconds)",
-                    value="60",
+                    "Duration (hours)",
+                    value="1.0",
                     key=f"{self.ns}_duration_text",
-                    help="Enter an integer number of seconds"
+                    help="Enter a decimal number of hours"
                 )
 
                 # Optional validation preview
                 try:
-                    duration_int = int(duration_text.strip())
-                    valid_duration = duration_int > 0
+                    duration_float = float(duration_text.strip())
+                    valid_duration = duration_float > 0
                 except Exception:
-                    duration_int = None
+                    duration_float = None
                     valid_duration = False
 
                 use_sched, sched_payload = (self._render_schedule_editor(new_exchange) or (False, None))
 
                 if st.button("Add configuration", key=f"{self.ns}_add_cfg_btn"):
                     if not all([new_ticker.strip(), new_exchange.strip(), valid_duration, stream_type.strip()]):
-                        st.error("Please fill in ticker, exchange, a positive integer duration, and stream type.")
+                        st.error("Please fill in ticker, exchange, a positive float duration, and integer stream type.")
                     else:
                         unique_id = self.unique_suffix()
                         cfg = {
@@ -729,7 +715,7 @@ class Section:
                         )
                     else:
                         st.markdown(
-                            f"{cfg['ticker']}.{cfg['exchange']} | stream={cfg['stream_type']} | duration={cfg['duration']}s"
+                            f"{cfg['ticker']}.{cfg['exchange']} | stream={cfg['stream_type']} | duration={cfg['duration']}hr"
                         )
 
             st.divider()

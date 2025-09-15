@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import pathlib
 
 ENV_PATH = ".env"
 

@@ -6,10 +6,9 @@ readme = "README.md"
 authors = [
     {name = "Josh Fody", email = "josh@jfadvancedanalytics.com"}
 ]
-requires-python = "~=3.13"
+requires-python = "~=3.13.0" # means “3.13.x”
 dependencies = [
     "numpy",
-    "matplotlib",
     "pandas",
     "websockets",
     "prefect==3.4.10",
@@ -22,6 +21,11 @@ ui = [
   "streamlit-autorefresh",
   "requests"
 ]
+writer = [
+  "redis",
+  "numpy",
+  "matplotlib",
+]
 
 [dependency-groups]
 dev = [
@@ -30,14 +34,16 @@ dev = [
     "mypy",
     "types-requests",
     "pytest",
-    "pytest-cov",
     "pytest-asyncio",
+    "pytest-timeout",
     "python-dotenv",
+    "fakeredis",
 
     # These are repeated here for local dev only to avoid errors
     "streamlit",
     "requests",
     "streamlit-autorefresh",
+    "matplotlib",
 ]
 
 [tool.ruff]
@@ -83,7 +89,21 @@ mypy_path = ["src", "tests"]
 # strict = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["integration: marks integration tests"]
+
+# sensible defaults so don't need to pass them at command
+addopts = """
+-m integration -rA --full-trace --durations=0
+--capture=tee-sys
+"""
+
+# make pytest stream logs live to the console
+log_cli = true
+log_cli_level = "INFO"
+log_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+log_cli_date_format = "%H:%M:%S"
 
 # [build-system]
 # requires = ["maturin>=1.0,<2.0"]

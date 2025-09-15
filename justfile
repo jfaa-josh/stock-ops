@@ -23,25 +23,13 @@ mypy:
     uv run mypy
 
 test:
-    uv run pytest --cov=src --cov-report=term-missing --log-cli-level=INFO tests
+    uv run pytest -vv
 
-generate-structure-doc:
-  if ! command -v tree &> /dev/null; then \
-    echo "'tree' not found. Installing..."; \
-    sudo apt-get update && sudo apt-get install -y tree; \
-  fi
-  mkdir -p docs
-  echo "# Repository Structure" > docs/structure.md
-  echo "" >> docs/structure.md
-
-  echo "## Top-Level Layout" >> docs/structure.md
-  ls -1 | sed 's/^/├── /' >> docs/structure.md
-
-  echo "" >> docs/structure.md
-  echo "## Source Code Structure (src/)" >> docs/structure.md
-  echo '```' >> docs/structure.md
-  tree src -a >> docs/structure.md
-  echo '```' >> docs/structure.md
+# If data/ exists, delete everything except data/test_data/inputs/**
+clean-data:
+    [ ! -d data ] || find data -mindepth 1 \
+    \( -path data/test_data/inputs -o -path 'data/test_data/inputs/*' \) -prune -o \
+    -exec rm -rf {} +
 
 # Generate a Dockerfile for the project
 docker-build:

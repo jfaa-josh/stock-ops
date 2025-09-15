@@ -1,10 +1,9 @@
-from typing import Protocol, runtime_checkable
-from typing import Any, Dict, Union, List
+from typing import Protocol, runtime_checkable, Any, Dict, Union, List
 from pathlib import Path
 from contextlib import contextmanager
 import sys
 
-import api_backend
+import datapipe_ui.api_backend as api_backend
 
 
 @contextmanager
@@ -23,7 +22,7 @@ def make_api(flow: str, test: bool):
     if test:
         project_root = Path(__file__).resolve().parents[1]  # contains both ui/ and local_workflows/
         with _temp_sys_path(project_root):
-            from local_workflows.streamlit.dummy_api import DummyAPIBackend
+            from local_workflows.streamlit_local.dummy_api import DummyAPIBackend
         return DummyAPIBackend(flow)
     return api_backend.APIBackend(flow)
 

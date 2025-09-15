@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+
+ARG PYTHON_VERSION
+FROM python:${PYTHON_VERSION}-slim
+
+# Set working directory in image
+WORKDIR /app
+
+# Install useful debugging tool
+RUN apt-get update && apt-get install -y curl && apt-get clean
+
+# Copy only what's needed to install dependencies
+COPY pyproject.toml uv.lock ./
+RUN pip install uv
+
+# Copy the helper script
+COPY scripts/install_writer_deps.py ./scripts/install_writer_deps.py
+
+# Install dependencies for writer only -> dynamically grab the writer deps and install them (avoids importing the whole repo)
+RUN python3 scripts/install_writer_deps.py
+
+# Copy the stockops subpackage bits
+COPY src/stockops/config/     ./src/stockops/config/
+COPY src/stockops/data/database/     ./src/stockops/data/database/
+COPY src/stockops/data/utils.py     ./src/stockops/data/utils.py
+
+# Create a dummy __init__.py file to make stockops a package for partial copy to work
+RUN mkdir -p ./src/stockops && :> ./src/stockops/__init__.py

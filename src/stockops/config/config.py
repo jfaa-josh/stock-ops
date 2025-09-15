@@ -11,15 +11,29 @@ SRC_DIR = ROOT_DIR / "src"
 PKG_DIR = SRC_DIR / "stockops"
 
 
-## Data Directory
+## Data directory
 def get_data_path(default_local):  # Switch for docker vs local
     return Path(os.environ.get("DB_DATA_DIR", default_local))
 
 
+def get_writedata_path(data_dir):  # Switch for docker vs local
+    if "DB_DATA_DIR" in os.environ:
+        return data_dir / "raw"
+    else:
+        return data_dir / "test_data"
+
+
 DATA_DIR = get_data_path(ROOT_DIR / "data")
 
+DATA_RAW_DIR = get_writedata_path(DATA_DIR)
+
 ### Streaming
-RAW_STREAMING_DIR = DATA_DIR / "raw" / "streaming"
+RAW_STREAMING_DIR = DATA_RAW_DIR / "streaming"
 
 ### Historical
-RAW_HISTORICAL_DIR = DATA_DIR / "raw" / "historical"
+RAW_HISTORICAL_DIR = DATA_RAW_DIR / "historical"
+
+## Writer message buffer
+RECOVER_EVERY_SEC = 240  # how often (in seconds) to run the "recover stale/pending messages" routine
+CLAIM_MIN_IDLE_SEC = 5_000  # only "claim" (take over) pending messages that have been idle for at least 5 seconds
+TRIM_EVERY_SEC = 3_600.0  # how often (in seconds) to attempt stream trimming when idle

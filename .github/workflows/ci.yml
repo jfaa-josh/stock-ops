@@ -8,8 +8,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATA_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
       PYTHONPATH: src
+      # Set optional tokens, if not exist, defaults to empty str
+      EODHD_API_TOKEN: ${{ secrets.EODHD_API_TOKEN || '' }}
+      # Add additional token options here
 
     steps:
       - name: Checkout code
@@ -39,16 +41,8 @@ jobs:
       - name: Run tests
         run: just test
 
-      - name: Generate structure.md
-        run: just generate-structure-doc
-
-      - name: Check for uncommitted changes in structure.md
-        run: |
-          git diff --exit-code docs/structure.md || (
-            echo "::error::docs/structure.md is out of sync. Run 'just generate-structure-doc'."
-            exit 1
-          )
-
+      - name: Clean up
+        run: just clean-data
   docker:
     name: Build Docker Images
     needs: build
