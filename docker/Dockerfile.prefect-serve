@@ -4,18 +4,26 @@ ARG PYTHON_VERSION
 ARG PREFECT_VERSION
 FROM prefecthq/prefect:${PREFECT_VERSION}-python${PYTHON_VERSION}
 
+# Smaller installs from uv and no .pyc to reduce image size
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_COMPILE=1
+
 # Set working directory in image
 WORKDIR /app
 
-# Install useful debugging tool
-RUN apt-get update && apt-get install -y curl && apt-get clean
+# Install only curl, with no recommends, and clean apt lists
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files only (to take advantage of layer caching)
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml README.md ./
 
 # Copy source code needed to execute flows
 COPY src/ ./src/
 COPY prefect/ ./prefect/
 
 # Install dependencies
-RUN uv pip install --system --editable .
+RUN pip install --no-cache-dir --editable .

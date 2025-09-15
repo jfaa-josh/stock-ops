@@ -119,10 +119,19 @@ services:
     ports:
       - "4200:4200"                                   # Expose the Prefect UI/API port
     healthcheck:                                      # Verify the API comes up successfully
-      test: ["CMD-SHELL", "curl -f http://localhost:4200/api/health || exit 1"]
+      test: [
+        "CMD", "python", "-c",
+        "import sys, urllib.request; u='http://127.0.0.1:4200/api/health'; ",
+        "try:\n",
+        "    r = urllib.request.urlopen(u, timeout=3)\n",
+        "    sys.exit(0 if 200 <= r.status < 300 else 1)\n",
+        "except Exception:\n",
+        "    sys.exit(1)\n"
+      ]
       interval: 5s                                    # Poll every 5 seconds
       timeout: 3s                                     # Timeout each check after 3 seconds
       retries: 10                                     # Try up to 10 times before marking unhealthy
+      start_period: 5s                                # give the API a moment to come up
 
   prefect-serve:                                      # Prefect agent for local (no worker pool/no deployment) task execution
     <<: *common-envfile                               # Load common .env file for environment variables

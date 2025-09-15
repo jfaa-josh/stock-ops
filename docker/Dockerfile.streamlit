@@ -3,14 +3,20 @@
 ARG PYTHON_VERSION
 FROM python:${PYTHON_VERSION}-slim
 
+# Smaller installs from uv and no .pyc to reduce image size
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_COMPILE=1
+
 WORKDIR /app
 
 # Tools + tzdata (ZoneInfo needs this on slim)
-RUN apt-get update && apt-get install -y curl tzdata && apt-get clean
+RUN python -m pip install --no-cache-dir --no-compile tzdata
 
 # Copy only what's needed to install dependencies
-COPY pyproject.toml uv.lock ./
-RUN pip install uv
+COPY pyproject.toml ./
 
 # Copy the helper script
 COPY scripts/install_ui_deps.py ./scripts/install_ui_deps.py
