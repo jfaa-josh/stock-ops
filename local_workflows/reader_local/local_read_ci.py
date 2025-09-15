@@ -16,8 +16,12 @@ def main():
 
         def run(provider, exchange, *, data_type, ticker, interval, start_date, end_date):
             reader = ReadProcess(provider, data_type, exchange)
+            logger.info('ReadProces instanced with data_type: %s, and ticker: %s', data_type, ticker)
             data = reader.read_sql(ticker, interval, start_date, end_date)
-            return reader.get_df(data)
+            logger.info('read_sql returned data with first row: %s', data[:1])
+            df = reader.get_df(data)
+            logger.info('get_df returned df.head(): %s', df.head())
+            return df
 
         # Daily historical VOO
         daily_test = {'data_type': "historical_interday", 'start_date': '2024-01-01',
