@@ -1,0 +1,19 @@
+name: Release                              # Workflow name shown in the GitHub Actions UI
+
+'on':                                        # Events that trigger this workflow
+  push:                                    # Trigger when code is pushed
+    branches: [main]                       # …specifically to the main branch
+  workflow_dispatch: {}                    # Allow manual runs from the Actions tab
+
+permissions:                               # Permissions granted to the GITHUB_TOKEN
+  contents: write                          # Needed to create tags/releases and update files
+  pull-requests: write                      # Needed to open or update pull requests
+  issues: write                             # Needed if the release process wants to comment on issues
+
+jobs:                                      # List of jobs for this workflow
+  release-please:                           # Single job named "release-please"
+    runs-on: ubuntu-latest                  # Use the latest Ubuntu runner for execution
+    steps:                                  # Steps to perform in this job
+      - uses: googleapis/release-please-action@v4   # GitHub Action that automates versioning and changelogs
+        with:
+          release-type: simple              # Use the "simple" strategy (one repo-wide version, no monorepo config)
