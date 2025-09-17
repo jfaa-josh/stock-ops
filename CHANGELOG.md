@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/jfaa-josh/stock-ops/compare/v0.1.0...v0.2.0) (2025-09-17)
+
+
+### Features
+
+* prepare release ([f0c8cad](https://github.com/jfaa-josh/stock-ops/commit/f0c8cad89ca1f3d62c43a26551822033868eb603))
+
 ## 0.1.0 (2025-09-17)
 
 
