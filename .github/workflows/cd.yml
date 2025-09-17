@@ -25,6 +25,11 @@ jobs:                                         # Top-level collection of jobs
         id: ns
         run: echo "ns=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
+      - name: Derive metadata
+        id: meta
+        run: |                                  # Write "version" to GITHUB_OUTPUT for use as steps.meta.outputs.version
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Prepare .env for build (PYTHON_VERSION / PREFECT_VERSION)
         run: python scripts/derive_env_from_pyproject.py
 
@@ -35,46 +40,67 @@ jobs:                                         # Top-level collection of jobs
           username: ${{ github.actor }}         # Use the GitHub user triggering the workflow
           password: ${{ secrets.GITHUB_TOKEN }}  # Built-in token with write permission to GHCR
 
-      # Build images as defined by docker-compose.yml
-      - name: Build (compose)
-        run: docker compose build               # Build all services described in docker-compose.yml
-
-      - name: Derive metadata
-        id: meta
-        run: |                                  # Write "version" to GITHUB_OUTPUT for use as steps.meta.outputs.version
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      # Tag and push each service image: ghcr.io/owner/repo-<service>:<version> and :latest
-      - name: Tag & push
-        shell: bash
-        env:                                    # Job-wide environment variables
-          NS: ${{ steps.ns.outputs.ns }}        # Base image namespace, e.g. ghcr.io/owner/repo
-          VERSION: ${{ steps.meta.outputs.version }}  # Use output version generated above
-        run: |                                  # Shell script to tag/push each service image
-          set -euo pipefail                     # Exit on error/undefined vars/pipe fails
-          for svc in $(docker compose config --services); do   # Loop over all service names
-            id=$(docker compose images --quiet "$svc")         # Get the built image ID
-            if [[ -z "$id" ]]; then                            # Skip if no image built
-              echo "::error::No image built for service '$svc'"; exit 1
-            fi
-            tgt="${NS}-${svc}:${VERSION}"                      # Versioned tag
-            latest="${NS}-${svc}:latest"                       # 'latest' tag
-            docker tag "$id" "$tgt"                            # Tag image with version
-            docker tag "$id" "$latest"                         # Tag image with latest
-            docker push "$tgt"                                  # Push versioned image
-            docker push "$latest"                               # Push latest image
-          done
-
       - name: Install yq
         run: |                                  # Install the yq YAML processor
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
+      # Determine which services are custom builds, and reuse this determination to avoid redundancy
+      - name: Resolve buildable services
+        id: svc
+        shell: bash
+        run: |
+          set -euo pipefail
+          svcs=$(docker compose config \
+            | yq -r '.services
+                      | to_entries
+                      | map(select(.value.build) | .key)
+                      | join(" ")')
+          echo "list=$svcs" >> "$GITHUB_OUTPUT"
+
+      # Determine if this is a release triggered run to avoid multiple actions
+      - name: Should skip heavy steps (is this release-please bot?)
+        id: guard
+        run: |
+          if [ "${{ github.actor }}" = "release-please[bot]" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+
+      # Build only services that have `build:` to avoid postgres/redis, etc.
+      - name: Build app images (compose)
+        if: ${{ steps.guard.outputs.skip != 'true' && steps.svc.outputs.list != '' }}
+        shell: bash
+        run: |                                # Build all local services described in docker-compose.yml
+          set -euo pipefail
+          for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list from above
+            docker compose build --pull "$svc"
+          done
+
+      # Tag and push each service image: ghcr.io/owner/repo-<service>:<version> and :latest
+      - name: Tag & push app images
+        if: ${{ steps.guard.outputs.skip != 'true' && steps.svc.outputs.list != '' }}
+        shell: bash
+        env:                                  # Job-wide environment variables
+          NS: ${{ steps.ns.outputs.ns }}      # Base image namespace, e.g. ghcr.io/owner/repo
+          VERSION: ${{ steps.meta.outputs.version }}  # Use output version generated above
+        run: |                                # Shell script to tag/push each service image
+          set -euo pipefail                   # Exit on error/undefined vars/pipe fails
+          for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list from above
+            id=$(docker compose images --quiet "$svc")  # Get the built image ID
+            docker tag "$id" "${NS}-${svc}:${VERSION}"  # Versioned tag
+            docker tag "$id" "${NS}-${svc}:latest"      # 'latest' tag
+            docker push "${NS}-${svc}:${VERSION}"       # Push versioned image
+            docker push "${NS}-${svc}:latest"           # Push latest image
+          done
+
       # Produce a pinned, pull-only compose file for deployment:
       # For any service that has build:, set image: ghcr.io/owner/repo-<service>:<version> and remove build:
       - name: Pin compose to release tag
         env:
-          VERSION: ${{ steps.meta.outputs.version }} # Carry forward env vars for clarity
+          VERSION: ${{ steps.meta.outputs.version }}  # Carry forward env vars for clarity
           NS: ${{ steps.ns.outputs.ns }}
         run: |                                  # Rewrite docker-compose.yml with fixed images
           yq -y '
