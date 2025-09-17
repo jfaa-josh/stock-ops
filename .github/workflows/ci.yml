@@ -52,8 +52,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install just
-        run: |
-          curl -sL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        uses: extractions/setup-just@v3
 
       - name: Generate .env from .python-version
         run: just docker-build
