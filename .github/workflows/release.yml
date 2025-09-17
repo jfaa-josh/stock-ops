@@ -17,3 +17,4 @@ jobs:                                      # List of jobs for this workflow
       - uses: googleapis/release-please-action@v4   # GitHub Action that automates versioning and changelogs
         with:
           release-type: simple              # Use the "simple" strategy (one repo-wide version, no monorepo config)
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
