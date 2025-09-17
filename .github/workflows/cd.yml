@@ -18,6 +18,8 @@ jobs:                                         # Top-level collection of jobs
     steps:                                     # Sequence of steps in this job
       - name: Checkout
         uses: actions/checkout@v4               # Clone the repository at the commit for the release
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Compute NS (lowercase)            # Compute NS and ensure lowercase to avoid issues
         id: ns
@@ -39,16 +41,15 @@ jobs:                                         # Top-level collection of jobs
 
       - name: Derive metadata
         id: meta
-        env:
-          VERSION: ${{ github.event.release.tag_name }}  # Release tag (e.g. v1.2.3)
         run: |                                  # Write "version" to GITHUB_OUTPUT for use as steps.meta.outputs.version
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       # Tag and push each service image: ghcr.io/owner/repo-<service>:<version> and :latest
       - name: Tag & push
         shell: bash
-        env:                                       # Job-wide environment variables
-          NS: ${{ steps.ns.outputs.ns }}          # Base image namespace, e.g. ghcr.io/owner/repo
+        env:                                    # Job-wide environment variables
+          NS: ${{ steps.ns.outputs.ns }}        # Base image namespace, e.g. ghcr.io/owner/repo
+          VERSION: ${{ steps.meta.outputs.version }}  # Use output version generated above
         run: |                                  # Shell script to tag/push each service image
           set -euo pipefail                     # Exit on error/undefined vars/pipe fails
           for svc in $(docker compose config --services); do   # Loop over all service names
@@ -73,8 +74,8 @@ jobs:                                         # Top-level collection of jobs
       # For any service that has build:, set image: ghcr.io/owner/repo-<service>:<version> and remove build:
       - name: Pin compose to release tag
         env:
-          VERSION: ${{ env.VERSION }}           # Carry forward env vars for clarity
-          NS: ${{ env.NS }}
+          VERSION: ${{ steps.meta.outputs.version }} # Carry forward env vars for clarity
+          NS: ${{ steps.ns.outputs.ns }}
         run: |                                  # Rewrite docker-compose.yml with fixed images
           yq -y '
             .services |= with_entries(           # For each service entry…
