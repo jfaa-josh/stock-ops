@@ -1,0 +1,94 @@
+name: CD                                      # Workflow name shown in GitHub Actions UI
+
+'on':  # Event triggers for this workflow
+  release:  # Trigger on a GitHub Release event
+    types: [published]  # Only run when a release is published
+
+permissions:                                  # Permissions granted to the GITHUB_TOKEN
+  contents: write                              # Allow updating release assets, etc.
+  packages: write                               # Allow pushing images to GitHub Container Registry (GHCR)
+
+concurrency:                                  # Prevent overlapping runs for the same ref
+  group: cd-${{ github.ref }}                  # Group key = "cd-" + branch or tag name
+  cancel-in-progress: true                     # Cancel any prior run in the same group
+
+jobs:                                         # Top-level collection of jobs
+  publish:                                    # Single job named "publish"
+    runs-on: ubuntu-latest                     # Execute on the latest Ubuntu runner
+    steps:                                     # Sequence of steps in this job
+      - name: Checkout
+        uses: actions/checkout@v4               # Clone the repository at the commit for the release
+
+      - name: Compute NS (lowercase)            # Compute NS and ensure lowercase to avoid issues
+        id: ns
+        run: echo "ns=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare .env for build (PYTHON_VERSION / PREFECT_VERSION)
+        run: python scripts/derive_env_from_pyproject.py
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3            # Docker login action
+        with:
+          registry: ghcr.io                     # Target registry = GitHub Container Registry
+          username: ${{ github.actor }}         # Use the GitHub user triggering the workflow
+          password: ${{ secrets.GITHUB_TOKEN }}  # Built-in token with write permission to GHCR
+
+      # Build images as defined by docker-compose.yml
+      - name: Build (compose)
+        run: docker compose build               # Build all services described in docker-compose.yml
+
+      - name: Derive metadata
+        id: meta
+        env:
+          VERSION: ${{ github.event.release.tag_name }}  # Release tag (e.g. v1.2.3)
+        run: |                                  # Write "version" to GITHUB_OUTPUT for use as steps.meta.outputs.version
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Tag and push each service image: ghcr.io/owner/repo-<service>:<version> and :latest
+      - name: Tag & push
+        shell: bash
+        env:                                       # Job-wide environment variables
+          NS: ${{ steps.ns.outputs.ns }}          # Base image namespace, e.g. ghcr.io/owner/repo
+        run: |                                  # Shell script to tag/push each service image
+          set -euo pipefail                     # Exit on error/undefined vars/pipe fails
+          for svc in $(docker compose config --services); do   # Loop over all service names
+            id=$(docker compose images --quiet "$svc")         # Get the built image ID
+            if [[ -z "$id" ]]; then                            # Skip if no image built
+              echo "::error::No image built for service '$svc'"; exit 1
+            fi
+            tgt="${NS}-${svc}:${VERSION}"                      # Versioned tag
+            latest="${NS}-${svc}:latest"                       # 'latest' tag
+            docker tag "$id" "$tgt"                            # Tag image with version
+            docker tag "$id" "$latest"                         # Tag image with latest
+            docker push "$tgt"                                  # Push versioned image
+            docker push "$latest"                               # Push latest image
+          done
+
+      - name: Install yq
+        run: |                                  # Install the yq YAML processor
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      # Produce a pinned, pull-only compose file for deployment:
+      # For any service that has build:, set image: ghcr.io/owner/repo-<service>:<version> and remove build:
+      - name: Pin compose to release tag
+        env:
+          VERSION: ${{ env.VERSION }}           # Carry forward env vars for clarity
+          NS: ${{ env.NS }}
+        run: |                                  # Rewrite docker-compose.yml with fixed images
+          yq -y '
+            .services |= with_entries(           # For each service entry…
+              if .value.build then               # If it has a local build context…
+                .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION)) | # Set image field
+                del(.value.build)                # Remove the build directive
+              else
+                .                                # Otherwise leave unchanged
+              end
+            )
+          ' docker-compose.yml > "docker-compose.${VERSION}.yml"   # Output pinned file
+
+      - name: Upload pinned compose to release
+        uses: softprops/action-gh-release@v2     # Add file to the GitHub release assets
+        with:
+          tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current release tag
+          files: docker-compose.${{ steps.meta.outputs.version }}.yml  # Upload the pinned compose file

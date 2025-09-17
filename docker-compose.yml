@@ -11,23 +11,23 @@ x-common-envvars: &common-envvars
   PREFECT_DEFAULT_WORK_POOL_NAME: default             # Default work pool for Prefect tasks
 
 services:
-###BASELINE SERVICES ALWAYS ON >>>>>>>>>>>>>>>>>>>>>>>>>>>
+  ###BASELINE SERVICES ALWAYS ON >>>>>>>>>>>>>>>>>>>>>>>>>>>
   init-db-permissions:                                # A quick service to set permissions for app/data volume
-    image: busybox:latest                             # Lightweight container image for running simple shell commands
+    image: busybox:1.37.0-glibc                       # Lightweight container image for running simple shell commands
     user: "0:0"                                       # Run as root (UID 0, GID 0) to allow modifying permissions
     volumes:
-      - db_data:/app/data                             # Mount the named volume `db_data` to /app/data inside the container
+      - db_data:/app/data                             # Mount named volume `db_data` to /app/data inside the container
     command:                                          # Command executed when the container starts
       [                                               # Change ownership recursively to UID/GID 1000 (non-root user)
         "sh", "-c",
         "chown -R 1000:1000 /app/data && \
          find /app/data -type d -exec chmod 2770 {} + && \
-         find /app/data -type f -exec chmod 0660 {} +" # Set directories to group-write, with setgid bit for inherited group
-      ]                                                # Set files to be user/group readable/writable, no access for others
+         find /app/data -type f -exec chmod 0660 {} +"  # Set dirs to group-write, with setgid bit for inherited grp
+      ]                                                # Set files to user/group readable/writable, no access for others
     restart: "no"
 
   postgres:                                           # PostgreSQL database service to store metadata for containers
-    image: postgres:14                                # Use Postgres version 14 image
+    image: postgres:17                                # Use Postgres version 17 image
     environment:                                      # Set database credentials
       POSTGRES_USER: prefect                          # Username for the DB
       POSTGRES_PASSWORD: prefect                      # Password for the DB
@@ -41,7 +41,7 @@ services:
       retries: 5
 
   redis:                                              # Redis cache/service for message brokering between containers
-    image: redis:7                                    # Use Redis version 7 image
+    image: redis:8                                    # Use Redis version 8 image
     volumes:
       - redis_data:/data                              # Persist Redis data on host volume
     healthcheck:                                      # Check Redis readiness
@@ -50,7 +50,7 @@ services:
       timeout: 5s                                     # Timeout per check
       retries: 5                                      # Number of retries before marking unhealthy
 
-###DATA PIPELINE CORE SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
+  ###DATA PIPELINE CORE SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
   writer-service:                                     # Defines the buffer & sqlite writer-service container
     <<: *common-envfile                               # Load common .env file for environment variables
     build:                                            # Build a custom image ahead of runtime
@@ -68,12 +68,12 @@ services:
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
     environment:                                      # Define environment variables for the container
       <<: *common-envvars                             # Inherit common environment variables
-      REDIS_URL: redis://redis:6379/1                 # Redis connection URL (host:port/db) (use DB1; DB0 is used by prefect)
+      REDIS_URL: redis://redis:6379/1                 # Redis connex URL (host:port/db) (use DB1; prefect uses DB0)
       PYTHONDONTWRITEBYTECODE: 1                      # Prevents Python from writing __pycache__ clutter to container
-      PYTHONUNBUFFERED: 1                             # Forces stdout/stderr logs to flush, appear in `docker logs` in real time
+      PYTHONUNBUFFERED: 1                             # Forces stdout/stderr logs to flush -> `docker logs` in real time
       BUFFER_STREAM: buf:ingest                       # Name of the Redis stream used for buffering ingest data
-      DB_DATA_DIR: /app/data                          # Define a variable to reference in src config for docker .db storage directory
-      BUFFER_BATCH: "500"                             # Maximum number of messages pulled from the Redis buffer in a single batch
+      DB_DATA_DIR: /app/data                          # Define src config var for docker .db storage dir
+      BUFFER_BATCH: "500"                             # Max num messages pulled from Redis in a single batch
       BUFFER_BLOCK_MS: "10000"                        # Latency control: max ms buffer blocks while waiting for new messages
       BUFFER_TRIM_MAXLEN: "100000"                    # keep stream bounded (approximate)
     volumes:
@@ -103,8 +103,8 @@ services:
       # Connection string for Prefect → Postgres:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       PREFECT_SERVER_API_HOST: 0.0.0.0                # Listen on every network interface
-      PREFECT_API_URL: http://prefect-server:4200/api # Internal API URL for Prefect services
-      PREFECT_UI_API_URL: http://localhost:4200/api   # Browser‐visible UI endpoint
+      PREFECT_API_URL: http://prefect-server:4200/api  # Internal API URL for Prefect services
+      PREFECT_UI_API_URL: http://localhost:4200/api   # Browser‐visible UI endpoint http://localhost:4200
       PREFECT_LOGGING_LEVEL: DEBUG                    # Verbose logs for debugging
       PREFECT_MESSAGING_BROKER: prefect_redis.messaging   # Broker config for Prefect messaging
       PREFECT_MESSAGING_CACHE: prefect_redis.messaging    # Cache config for messaging
@@ -119,12 +119,21 @@ services:
     ports:
       - "4200:4200"                                   # Expose the Prefect UI/API port
     healthcheck:                                      # Verify the API comes up successfully
-      test: ["CMD-SHELL", "curl -f http://localhost:4200/api/health || exit 1"]
+      test: [
+        "CMD", "python", "-c",
+        "import sys, urllib.request; u='http://127.0.0.1:4200/api/health'; ",
+        "try:\n",
+        "    r = urllib.request.urlopen(u, timeout=3)\n",
+        "    sys.exit(0 if 200 <= r.status < 300 else 1)\n",
+        "except Exception:\n",
+        "    sys.exit(1)\n"
+      ]
       interval: 5s                                    # Poll every 5 seconds
       timeout: 3s                                     # Timeout each check after 3 seconds
       retries: 10                                     # Try up to 10 times before marking unhealthy
+      start_period: 5s                                # give the API a moment to come up
 
-  prefect-serve:                                      # Prefect agent for local (no worker pool/no deployment) task execution
+  prefect-serve:                                      # Prefect agent for local (no worker pool/no deployment)
     <<: *common-envfile                               # Load common .env file for environment variables
     build:
       context: .                                      # Docker build context is repo root
@@ -141,12 +150,12 @@ services:
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
     environment:                                      # Prefect configuration variables
       <<: *common-envvars                             # Inherit common environment variables
-      PREFECT_API_URL: http://prefect-server:4200/api # API URL for the worker to pull jobs
+      PREFECT_API_URL: http://prefect-server:4200/api  # API URL for the worker to pull jobs
       REDIS_URL: redis://redis:6379/1                 # Access to Redis DB1 for writer-service connect
       BUFFER_STREAM: buf:ingest                       # Env for Redis stream used by writer-service
-      DB_DATA_DIR: /app/data                          # Define a variable to reference in src config to set paths for docker .db
-                                                      # └─ Note: prefect-serve does not access .db; DB_DATA_DIR only for filepath creation
-    command: >                                        # Create default pool (if missing); Start a forever-running worker polling 'default':
+      DB_DATA_DIR: /app/data                          # Define var to ref in src config to set paths for docker .db
+                                # └─ Note: prefect-serve does not access .db; DB_DATA_DIR only for filepath creation
+    command: >                                        # Create default pool (if missing); Start worker polling 'default'
       bash -c "
         prefect work-pool create default --type process --set-as-default || true &&
         prefect worker start --pool default --type process
@@ -175,11 +184,11 @@ services:
     environment:
       <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api   # Prefect API URL for Streamlit to trigger flows
-      VERBOSE_LOGGING: "false"                        # Sets a variable in python streamlit_ui code to silence some logging ("true"/"false")
-      PYTHONPATH: /app:/app/src                       # Override .env's ./src to allow relative imports needed for pytest in code
+      VERBOSE_LOGGING: "false"                        # Sets streamlit_ui code var to reduce logging ("true"/"false")
+      PYTHONPATH: /app:/app/src                       # Override .env's ./src to allow relative imports for pytest
     command: streamlit run datapipe_ui/frontend.py      # Launch the Streamlit application
 
-###DATA PIPELINE OPTIONAL SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
+  ###DATA PIPELINE OPTIONAL SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
   sqlitebrowser:
     # image: lscr.io/linuxserver/sqlitebrowser:latest   # LinuxServer.io's maintained image for DB Browser for SQLite
     image: docker.io/linuxserver/sqlitebrowser:version-3.13.1-r0
@@ -190,9 +199,9 @@ services:
         condition: service_healthy
       init-db-permissions:                            # Ensure permissions to access files in db
         condition: service_completed_successfully
-    profiles: ["datapipe-visualize-data"]             # This service only starts with `--profile datapipe-visualize-data`
+    profiles: ["datapipe-visualize-data"]             # Service only starts with `--profile datapipe-visualize-data`
     environment:
-      - PUID=1000                                     # Host user ID (so files written inside container have correct ownership)
+      - PUID=1000                                     # Host user ID (so container files have correct ownership)
       - PGID=1000                                     # Host group ID (same reason as above)
       - UMASK=002                                     # Validate runtim umask for file permissions conformity
       - TZ=Etc/UTC                                    # Set container timezone (affects logs, timestamps in UI)
@@ -203,7 +212,7 @@ services:
       - "8081:3000"                                   # Expose container port 3000 (HTTP UI) on host port 8081
                                                       # → open http://localhost:8081 in browser
     security_opt:
-      - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies can run properly
+      - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies run properly
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
 
 volumes:                                              # Named Docker volumes for data persistence

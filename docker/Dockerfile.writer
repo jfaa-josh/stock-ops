@@ -3,21 +3,25 @@
 ARG PYTHON_VERSION
 FROM python:${PYTHON_VERSION}-slim
 
+# Smaller installs from uv and no .pyc to reduce image size
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_COMPILE=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 # Set working directory in image
 WORKDIR /app
 
-# Install useful debugging tool
-RUN apt-get update && apt-get install -y curl && apt-get clean
-
 # Copy only what's needed to install dependencies
-COPY pyproject.toml uv.lock ./
-RUN pip install uv
+COPY pyproject.toml ./
 
 # Copy the helper script
 COPY scripts/install_writer_deps.py ./scripts/install_writer_deps.py
 
-# Install dependencies for writer only -> dynamically grab the writer deps and install them (avoids importing the whole repo)
-RUN python3 scripts/install_writer_deps.py
+# Install writer-only dependencies (script should call pip with no cache; env above enforces that)
+RUN python -m pip install --upgrade pip && \
+    python scripts/install_writer_deps.py
 
 # Copy the stockops subpackage bits
 COPY src/stockops/config/     ./src/stockops/config/
