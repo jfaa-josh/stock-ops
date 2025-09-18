@@ -55,11 +55,10 @@ jobs:                                         # Top-level collection of jobs
         shell: bash
         run: |
           set -euo pipefail
-          svcs=$(docker compose config \
-            | yq e -r '.services
+          svcs=$(yq -r '.services
                       | to_entries
                       | map(select(.value.build) | .key)
-                      | join(" ")')
+                      | join(" ")' docker-compose.yml)
           echo "list=$svcs" >> "$GITHUB_OUTPUT"
 
       # Build only services that have `build:` to avoid postgres/redis, etc.
@@ -102,9 +101,13 @@ jobs:                                         # Top-level collection of jobs
 
             EXPR=$(cat <<'YQ'
             .services |= with_entries(
-            select(.value | has("build"))
-            | .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION))
-            | del(.value.build)
+              (. as $e
+               | (
+                   select(.value | has("build"))
+                   | .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION))
+                   | del(.value.build)
+                 ) // $e
+              )
             )
             YQ
             )
@@ -114,5 +117,5 @@ jobs:                                         # Top-level collection of jobs
       - name: Upload pinned compose to release
         uses: softprops/action-gh-release@v2     # Add file to the GitHub release assets
         with:
-          tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current release tag
+          tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current
           files: docker-compose.${{ steps.meta.outputs.version }}.yml  # Upload the pinned compose file
