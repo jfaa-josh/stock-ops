@@ -101,9 +101,13 @@ jobs:                                         # Top-level collection of jobs
 
             EXPR=$(cat <<'YQ'
             .services |= with_entries(
-            select(.value | has("build"))
-            | .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION))
-            | del(.value.build)
+              (. as $e
+               | (
+                   select(.value | has("build"))
+                   | .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION))
+                   | del(.value.build)
+                 ) // $e
+              )
             )
             YQ
             )
@@ -113,5 +117,5 @@ jobs:                                         # Top-level collection of jobs
       - name: Upload pinned compose to release
         uses: softprops/action-gh-release@v2     # Add file to the GitHub release assets
         with:
-          tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current release tag
+          tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current
           files: docker-compose.${{ steps.meta.outputs.version }}.yml  # Upload the pinned compose file
