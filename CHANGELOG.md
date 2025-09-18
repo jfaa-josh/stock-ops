@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/jfaa-josh/stock-ops/compare/v0.4.0...v0.5.0) (2025-09-18)
+
+
+### Features
+
+* **cd:** Fixing parsing on yq for cd ([#21](https://github.com/jfaa-josh/stock-ops/issues/21)) ([f44ebbd](https://github.com/jfaa-josh/stock-ops/commit/f44ebbdc64f3c1a14716b650335f90b7d954b1b2))
+
 ## [0.4.0](https://github.com/jfaa-josh/stock-ops/compare/v0.3.0...v0.4.0) (2025-09-18)
 
 
