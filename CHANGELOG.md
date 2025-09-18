@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/jfaa-josh/stock-ops/compare/v0.6.0...v0.7.0) (2025-09-18)
+
+
+### Features
+
+* **cd:** Feat/fixing ghcr nopush ([#26](https://github.com/jfaa-josh/stock-ops/issues/26)) ([5f65368](https://github.com/jfaa-josh/stock-ops/commit/5f6536892acd0c9bd539ad767f8208cd3edf6b5a))
+
 ## [0.6.0](https://github.com/jfaa-josh/stock-ops/compare/v0.5.0...v0.6.0) (2025-09-18)
 
 
