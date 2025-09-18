@@ -56,7 +56,7 @@ jobs:                                         # Top-level collection of jobs
         run: |
           set -euo pipefail
           svcs=$(docker compose config \
-            | yq -r '.services
+            | yq e -r '.services
                       | to_entries
                       | map(select(.value.build) | .key)
                       | join(" ")')
@@ -96,7 +96,7 @@ jobs:                                         # Top-level collection of jobs
           VERSION: ${{ steps.meta.outputs.version }}  # Carry forward env vars for clarity
           NS: ${{ steps.ns.outputs.ns }}
         run: |                                  # Rewrite docker-compose.yml with fixed images
-          yq -y '
+          yq e -o=yaml '
             .services |= with_entries(           # For each service entry…
               if .value.build then               # If it has a local build context…
                 .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION)) | # Set image field
