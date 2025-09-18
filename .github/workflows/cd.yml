@@ -55,11 +55,10 @@ jobs:                                         # Top-level collection of jobs
         shell: bash
         run: |
           set -euo pipefail
-          svcs=$(docker compose config \
-            | yq e -r '.services
+          svcs=$(yq -r '.services
                       | to_entries
                       | map(select(.value.build) | .key)
-                      | join(" ")')
+                      | join(" ")' docker-compose.yml)
           echo "list=$svcs" >> "$GITHUB_OUTPUT"
 
       # Build only services that have `build:` to avoid postgres/redis, etc.
