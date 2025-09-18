@@ -9,6 +9,7 @@ permissions:                               # Permissions granted to the GITHUB_T
   contents: write                          # Needed to create tags/releases and update files
   pull-requests: write                      # Needed to open or update pull requests
   issues: write                             # Needed if the release process wants to comment on issues
+  packages: write                           # required by cd.yml (GHCR push)
 
 jobs:                                      # List of jobs for this workflow
   release-please:                           # Single job named "release-please"
@@ -27,3 +28,4 @@ jobs:                                      # List of jobs for this workflow
     uses: ./.github/workflows/cd.yml        # Call the reusable workflow at .github/workflows/cd.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}  # Pass ver tag to the called workflow's inputs
+    secrets: inherit                        # Needed since cd.yml uses repository secrets.GITHUB_TOKEN
