@@ -13,8 +13,17 @@ permissions:                               # Permissions granted to the GITHUB_T
 jobs:                                      # List of jobs for this workflow
   release-please:                           # Single job named "release-please"
     runs-on: ubuntu-latest                  # Use the latest Ubuntu runner for execution
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}  # "true"/"false" if new release created
+      tag_name: ${{ steps.release.outputs.tag_name }}  # Release tag (e.g., v1.2.3) if release_created "true"
     steps:                                  # Steps to perform in this job
       - uses: googleapis/release-please-action@v4   # GitHub Action that automates versioning and changelogs
+        id: release
         with:
-          release-type: simple              # Use the "simple" strategy (one repo-wide version, no monorepo config)
-          token: ${{ secrets.RELEASE_PLEASE_PAT }}
+          release-type: simple              # No 'token' input—defaults to GITHUB_TOKEN
+  cd:
+    needs: release-please                   # Wait for job "release-please" to finish and expose its outputs
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}  # Run only if new release created
+    uses: ./.github/workflows/cd.yml        # Call the reusable workflow at .github/workflows/cd.yml
+    with:
+      tag_name: ${{ needs.release-please.outputs.tag_name }}  # Pass ver tag to the called workflow's inputs

@@ -1,15 +1,18 @@
 name: CD                                      # Workflow name shown in GitHub Actions UI
 
-'on':  # Event triggers for this workflow
-  release:  # Trigger on a GitHub Release event
-    types: [published]  # Only run when a release is published
+'on':
+  workflow_call:                 # Enables this workflow to be called by other workflows ("reusable workflow")
+    inputs:
+      tag_name:                  # Input provided by the caller; accessible as inputs.tag_name inside this workflow
+        required: true           # Caller must supply this input or the call will fail
+        type: string             # Treat as a string (e.g., "v1.2.3"); types allowed: string, number, boolean, etc.
 
 permissions:                                  # Permissions granted to the GITHUB_TOKEN
   contents: write                              # Allow updating release assets, etc.
   packages: write                               # Allow pushing images to GitHub Container Registry (GHCR)
 
 concurrency:                                  # Prevent overlapping runs for the same ref
-  group: cd-${{ github.ref }}                  # Group key = "cd-" + branch or tag name
+  group: cd-${{ inputs.tag_name }}             # Group key = "cd-" + tag name
   cancel-in-progress: true                     # Cancel any prior run in the same group
 
 jobs:                                         # Top-level collection of jobs
@@ -19,7 +22,8 @@ jobs:                                         # Top-level collection of jobs
       - name: Checkout
         uses: actions/checkout@v4               # Clone the repository at the commit for the release
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ inputs.tag_name }}
+          fetch-depth: 0                        # ensures the tag is fetchable in all cases
 
       - name: Compute NS (lowercase)            # Compute NS and ensure lowercase to avoid issues
         id: ns
@@ -28,7 +32,7 @@ jobs:                                         # Top-level collection of jobs
       - name: Derive metadata
         id: meta
         run: |                                  # Write "version" to GITHUB_OUTPUT for use as steps.meta.outputs.version
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "version=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare .env for build (PYTHON_VERSION / PREFECT_VERSION)
         run: python scripts/derive_env_from_pyproject.py
@@ -58,20 +62,9 @@ jobs:                                         # Top-level collection of jobs
                       | join(" ")')
           echo "list=$svcs" >> "$GITHUB_OUTPUT"
 
-      # Determine if this is a release triggered run to avoid multiple actions
-      - name: Should skip heavy steps (is this release-please bot?)
-        id: guard
-        run: |
-          if [ "${{ github.actor }}" = "release-please[bot]" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-
       # Build only services that have `build:` to avoid postgres/redis, etc.
       - name: Build app images (compose)
-        if: ${{ steps.guard.outputs.skip != 'true' && steps.svc.outputs.list != '' }}
+        if: ${{ steps.svc.outputs.list != '' }}
         shell: bash
         run: |                                # Build all local services described in docker-compose.yml
           set -euo pipefail
@@ -81,7 +74,7 @@ jobs:                                         # Top-level collection of jobs
 
       # Tag and push each service image: ghcr.io/owner/repo-<service>:<version> and :latest
       - name: Tag & push app images
-        if: ${{ steps.guard.outputs.skip != 'true' && steps.svc.outputs.list != '' }}
+        if: ${{ steps.svc.outputs.list != '' }}
         shell: bash
         env:                                  # Job-wide environment variables
           NS: ${{ steps.ns.outputs.ns }}      # Base image namespace, e.g. ghcr.io/owner/repo
