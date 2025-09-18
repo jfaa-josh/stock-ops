@@ -22,10 +22,6 @@ jobs:                                      # List of jobs for this workflow
         id: release
         with:
           release-type: simple              # No 'token' input—defaults to GITHUB_TOKEN
-      - name: Debug release-please outputs
-        run: |
-          echo "release_created=${{ steps.release.outputs.release_created }}"
-          echo "tag_name=${{ steps.release.outputs.tag_name }}"
   cd:
     needs: release-please                   # Wait for job "release-please" to finish and expose its outputs
     if: ${{ needs.release-please.outputs.release_created == 'true' }}  # Run only if new release created
