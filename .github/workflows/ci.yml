@@ -4,8 +4,7 @@ name: CI
   pull_request:
     branches: [main]
   push:
-    branches:
-      - '**'     # run on any branch push
+    branches-ignore: [main]
     tags-ignore: ['v*']
 
 concurrency:
