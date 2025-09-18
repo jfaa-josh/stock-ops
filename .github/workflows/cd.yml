@@ -95,17 +95,21 @@ jobs:                                         # Top-level collection of jobs
         env:
           VERSION: ${{ steps.meta.outputs.version }}  # Carry forward env vars for clarity
           NS: ${{ steps.ns.outputs.ns }}
+        shell: bash
         run: |                                  # Rewrite docker-compose.yml with fixed images
-          yq e -o=yaml '
-            .services |= with_entries(           # For each service entry…
-              if .value.build then               # If it has a local build context…
-                .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION)) | # Set image field
-                del(.value.build)                # Remove the build directive
-              else
-                .                                # Otherwise leave unchanged
-              end
+            set -euo pipefail
+            yq e '
+            .services |= with_entries(          # For each service entry…
+                if (.value | has("build")) then  # If it has a local build context…
+                .value |= (
+                    .image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION))  # Set image field
+                    | del(.build)               # Remove the build directive
+                )
+                else
+                .                               # Otherwise leave unchanged
+                end
             )
-          ' docker-compose.yml > "docker-compose.${VERSION}.yml"   # Output pinned file
+            ' docker-compose.yml > "docker-compose.${VERSION}.yml"  # Output pinned file
 
       - name: Upload pinned compose to release
         uses: softprops/action-gh-release@v2     # Add file to the GitHub release assets
