@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/jfaa-josh/stock-ops/compare/v0.5.0...v0.6.0) (2025-09-18)
+
+
+### Features
+
+* **cd:** Tested and verified new exec for Pin compose to release tag using yq ([#23](https://github.com/jfaa-josh/stock-ops/issues/23)) ([bb0d5cd](https://github.com/jfaa-josh/stock-ops/commit/bb0d5cd7ce823ec380496afd81cddc8e6c526586))
+
 ## [0.5.0](https://github.com/jfaa-josh/stock-ops/compare/v0.4.0...v0.5.0) (2025-09-18)
 
 
