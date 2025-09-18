@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/jfaa-josh/stock-ops/compare/v0.3.0...v0.4.0) (2025-09-18)
+
+
+### Features
+
+* **cd:** Fixing incorrect flags on yq for cd ([#19](https://github.com/jfaa-josh/stock-ops/issues/19)) ([8cd6a1c](https://github.com/jfaa-josh/stock-ops/commit/8cd6a1ce87d653a078b6b3f79f1925a36530804f))
+
 ## [0.3.0](https://github.com/jfaa-josh/stock-ops/compare/v0.2.0...v0.3.0) (2025-09-18)
 
 
