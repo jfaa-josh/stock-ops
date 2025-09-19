@@ -81,7 +81,17 @@ jobs:                                         # Top-level collection of jobs
         run: |                                # Shell script to tag/push each service image
           set -euo pipefail                   # Exit on error/undefined vars/pipe fails
           for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list from above
-            id=$(docker compose images --quiet "$svc")  # Get the built image ID
+            # Prefer the exact repo:tag Compose emitted
+            id="$(docker compose images --format '{{.Repository}}:{{.Tag}}' "$svc" | head -n1)"
+            # Fallback: try the simple "${svc}:latest" if Compose didn't report anything
+            if [ -z "${id}" ]; then
+                if docker image inspect "${svc}:latest" >/dev/null 2>&1; then
+                id="${svc}:latest"
+                else
+                echo "No built image found for service: $svc" >&2
+                exit 1
+                fi
+            fi
             docker tag "$id" "${NS}-${svc}:${VERSION}"  # Versioned tag
             docker tag "$id" "${NS}-${svc}:latest"      # 'latest' tag
             docker push "${NS}-${svc}:${VERSION}"       # Push versioned image
@@ -117,5 +127,5 @@ jobs:                                         # Top-level collection of jobs
       - name: Upload pinned compose to release
         uses: softprops/action-gh-release@v2     # Add file to the GitHub release assets
         with:
-          tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current
+          tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current version
           files: docker-compose.${{ steps.meta.outputs.version }}.yml  # Upload the pinned compose file
