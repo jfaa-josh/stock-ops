@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/jfaa-josh/stock-ops/compare/v0.8.0...v0.9.0) (2025-09-19)
+
+
+### Features
+
+* **cd:** Second attempt to modify custom build image names sourced correctly for tagging an push step ([#30](https://github.com/jfaa-josh/stock-ops/issues/30)) ([5bdadab](https://github.com/jfaa-josh/stock-ops/commit/5bdadab40ec5fc1d03ef70f56758b637f8e7d4d4))
+
 ## [0.8.0](https://github.com/jfaa-josh/stock-ops/compare/v0.7.0...v0.8.0) (2025-09-19)
 
 
