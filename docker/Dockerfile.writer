@@ -10,6 +10,9 @@ ENV PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Set path because pip does not do full package install here
+ENV PYTHONPATH=/app:/app/src
+
 # Set working directory in image
 WORKDIR /app
 

@@ -31,7 +31,6 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
   docker --version
   docker compose version
   ```
-- Access to pull images from 🚨ghcr.io.
 
 ---
 
@@ -58,13 +57,10 @@ These files reference immutable image tags—no local build required.
 Create an .env in the same directory as the compose file.  File should contain exactly as shown below, except fill in required info where indicated:
 ```bash
 cat > .env << 'EOF'
-PYTHONPATH=./src
-
-# Set optional provider tokens here:
+# Set provider tokens here:
 EODHD_API_TOKEN=__PUT_YOUR_TOKEN_HERE__
 EOF
 ```
-🚨 NEED TO ADD SOMETHING TO RUN BUILD ENV FROM PYPROJECT HERE TO SET PATHS I MAY NOT EVEN NEED PYTHONPATH HERE!!! 🚨
 
 Note: Your .env stays local and is never pushed to GitHub.
 
@@ -77,7 +73,6 @@ StockOps is currently capable of interacting with the following providers:
 ### Core stack only:
 Start the main data-pipeline profile:
 
-🚨WINDOWS WSL?
 ```bash
 docker compose -f docker-compose.vx.y.z.yml --profile datapipe-core up -d
 ```
@@ -101,8 +96,6 @@ docker compose -f docker-compose.vx.y.z.yml --profile datapipe-core --profile da
 Adds:
 
 -  sqlitebrowser – for viewing database files located at `Computer/data/`.
-
-🚨ADD MORE DOCKER COMPOSE INSTRUCTIONS!!!
 
 ## 4. Additional Launch, Verify, and Access
 ### Check status:
