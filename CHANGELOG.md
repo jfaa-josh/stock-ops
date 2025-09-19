@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/jfaa-josh/stock-ops/compare/v0.9.0...v0.10.0) (2025-09-19)
+
+
+### Features
+
+* **cd:** Trying to fix exit from loop due to error ([#32](https://github.com/jfaa-josh/stock-ops/issues/32)) ([b814dbc](https://github.com/jfaa-josh/stock-ops/commit/b814dbc9a30016196fa3d546969382405096a11a))
+
 ## [0.9.0](https://github.com/jfaa-josh/stock-ops/compare/v0.8.0...v0.9.0) (2025-09-19)
 
 
