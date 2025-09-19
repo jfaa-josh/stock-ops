@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/jfaa-josh/stock-ops/compare/v0.7.0...v0.8.0) (2025-09-19)
+
+
+### Features
+
+* **cd:** modify Tag & push app images to verify correct image names ([#28](https://github.com/jfaa-josh/stock-ops/issues/28)) ([0604a07](https://github.com/jfaa-josh/stock-ops/commit/0604a07bd3d5b6e84d79b4c19fbd063cd3769324))
+
 ## [0.7.0](https://github.com/jfaa-josh/stock-ops/compare/v0.6.0...v0.7.0) (2025-09-18)
 
 
