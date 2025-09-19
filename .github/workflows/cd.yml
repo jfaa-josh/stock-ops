@@ -84,8 +84,7 @@ jobs:                                         # Top-level collection of jobs
           for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list of custom build services from above
             id="$(docker image ls --format '{{.Repository}}:{{.Tag}}' \
                   --filter "label=com.docker.compose.service=${svc}" \
-                  | grep -v ':<none>$' \
-                  | head -n1)"
+                  | awk '$0 !~ /:<none>$/ {print; exit}' || true)"
 
             if [ -z "${id}" ]; then
               if docker image inspect "${svc}:latest" >/dev/null 2>&1; then
