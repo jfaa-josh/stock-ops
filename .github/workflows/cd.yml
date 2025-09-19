@@ -71,7 +71,8 @@ jobs:                                         # Top-level collection of jobs
             docker compose build --pull "$svc"
           done
 
-      # Tag and push each service image: ghcr.io/owner/repo-<service>:<version> and :latest
+      # Tag and push each custom service image: ghcr.io/owner/repo-<service>:<version> and :latest
+      # Logic to ensure correct image names are sourced to avoid nulls
       - name: Tag & push app images
         if: ${{ steps.svc.outputs.list != '' }}
         shell: bash
@@ -80,18 +81,22 @@ jobs:                                         # Top-level collection of jobs
           VERSION: ${{ steps.meta.outputs.version }}  # Use output version generated above
         run: |                                # Shell script to tag/push each service image
           set -euo pipefail                   # Exit on error/undefined vars/pipe fails
-          for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list from above
-            # Prefer the exact repo:tag Compose emitted
-            id="$(docker compose images --format '{{.Repository}}:{{.Tag}}' "$svc" | head -n1)"
-            # Fallback: try the simple "${svc}:latest" if Compose didn't report anything
+          for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list of custom build services from above
+            id="$(docker image ls --format '{{.Repository}}:{{.Tag}}' \
+                  --filter "label=com.docker.compose.service=${svc}" \
+                  | grep -v ':<none>$' \
+                  | head -n1)"
+
             if [ -z "${id}" ]; then
-                if docker image inspect "${svc}:latest" >/dev/null 2>&1; then
+              if docker image inspect "${svc}:latest" >/dev/null 2>&1; then
                 id="${svc}:latest"
-                else
+              else
                 echo "No built image found for service: $svc" >&2
                 exit 1
-                fi
+              fi
             fi
+
+            echo "FOUND $svc -> $id"
             docker tag "$id" "${NS}-${svc}:${VERSION}"  # Versioned tag
             docker tag "$id" "${NS}-${svc}:latest"      # 'latest' tag
             docker push "${NS}-${svc}:${VERSION}"       # Push versioned image
