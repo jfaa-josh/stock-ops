@@ -132,4 +132,8 @@ jobs:                                         # Top-level collection of jobs
         uses: softprops/action-gh-release@v2     # Add file to the GitHub release assets
         with:
           tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current version
-          files: docker-compose.${{ steps.meta.outputs.version }}.yml  # Upload the pinned compose file
+          files: |                # Upload the pinned compose file, readme, and license to release
+            docker-compose.${{ steps.meta.outputs.version }}.yml
+            README-QUICKSTART.md
+            LICENSE.md
+          body_path: README-QUICKSTART.md        # makes the release description this README
