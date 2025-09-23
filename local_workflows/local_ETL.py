@@ -52,12 +52,12 @@ def test_local():
 
     # command = {'ticker': 'SPY', 'exchange': 'US', 'interval': '1h', 'start': '2025-07-02 09:30', 'end': '2025-07-03 16:00'}
     # command_type = 'fetch_historical'
-    command = {'ticker': 'VOO', 'exchange': 'US', 'interval': 'd', 'start': '2024-10-25', 'end': '2024-11-04'}
-    command_type = 'fetch_historical'
+    # command = {'ticker': 'VOO', 'exchange': 'US', 'interval': 'd', 'start': '2024-10-25', 'end': '2024-11-04'}
+    # command_type = 'fetch_historical'
     # command_type="start_stream"
     # command = {"stream_type": "trades", "tickers": 'SPY', 'exchange': 'US', "duration": 20}
-    # command_type="start_stream"
-    # command = {"stream_type": "quotes", "tickers": 'SPY', 'exchange': 'US', "duration": 20}
+    command_type="start_stream"
+    command = {"stream_type": "quotes", "tickers": 'SPY', 'exchange': 'US', "duration": 20}
 
     controller_driver_flow(command, command_type, provider)
 
