@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/jfaa-josh/stock-ops/compare/v0.10.0...v0.11.0) (2025-09-23)
+
+
+### Features
+
+* **cd:** Feat/cd refinements ([#34](https://github.com/jfaa-josh/stock-ops/issues/34)) ([4624eaa](https://github.com/jfaa-josh/stock-ops/commit/4624eaa03301e40bb717109e2610c8dfa306078a))
+
 ## [0.10.0](https://github.com/jfaa-josh/stock-ops/compare/v0.9.0...v0.10.0) (2025-09-19)
 
 
