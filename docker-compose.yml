@@ -215,6 +215,21 @@ services:
       - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies run properly
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
 
+  nginx:
+    image: nginx:alpine
+    container_name: nginx                     # Name shown in `docker ps` for easy reference
+    depends_on:
+      - streamlit
+    profiles: ["nginx-deploy"]             # Service only starts with `--profile datapipe-visualize-data`
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/letsencrypt:ro   # if you use certbot on host or companion container
+      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+    restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
+
 volumes:                                              # Named Docker volumes for data persistence
   postgres_data:                                      # Holds Postgres data directory
   redis_data:                                         # Holds Redis data directory
