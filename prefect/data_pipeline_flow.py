@@ -6,8 +6,8 @@ from stockops.data.historical.providers import get_historical_service
 from stockops.data.streaming.providers import get_streaming_service
 from stockops.data.controller import Controller
 
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger("stockops").setLevel(logging.DEBUG)
 
 @task
 def run_controller_task(command: Dict[str, Any], command_type: str, provider: str = "EODHD") -> None:
