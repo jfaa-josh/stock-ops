@@ -116,8 +116,6 @@ services:
         condition: service_healthy                    # Wait for Postgres to be ready
       redis:
         condition: service_healthy                    # Wait for Redis to be ready
-    ports:
-      - "4200:4200"                                   # Expose the Prefect UI/API port
     healthcheck:                                      # Verify the API comes up successfully
       test: [
         "CMD", "python", "-c",
@@ -175,8 +173,6 @@ services:
         PYTHON_VERSION: ${PYTHON_VERSION}             # Pass Python version to Dockerfile
       dockerfile: docker/Dockerfile.streamlit         # Custom Dockerfile for Streamlit
     image: streamlit                                  # Name of the built Streamlit image
-    ports:
-      - "8501:8501"                                   # Expose Streamlit app port (view at http://localhost:8501/)
     depends_on:
       prefect-serve:
         condition: service_healthy                    # Wait until Prefect server is ready
@@ -208,9 +204,6 @@ services:
     volumes:
       - sqlitebrowser_config:/config                  # Stores the app's own settings/config; persistent across restarts
       - db_data:/data                                 # Mount your named volume with SQLite .db files
-    ports:
-      - "8081:3000"                                   # Expose container port 3000 (HTTP UI) on host port 8081
-                                                      # → open http://localhost:8081 in browser
     security_opt:
       - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies run properly
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
@@ -220,7 +213,7 @@ services:
     container_name: nginx                     # Name shown in `docker ps` for easy reference
     depends_on:
       - streamlit
-    profiles: ["nginx-deploy"]             # Service only starts with `--profile datapipe-visualize-data`
+    profiles: ["nginx-deploy"]             # Service only starts with `--profile nginx-deploy`
     ports:
       - "80:80"
       - "443:443"

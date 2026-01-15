@@ -38,12 +38,12 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
 1) Create an empty folder for deployment
 2) Download `docker-compose.vx.y.z.yml` from GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
 3) Create .env and set API token ([see instructions](#2-configure-environment))
-4) Launch full datapipeline stack in detached mode:
+4) Launch full datapipeline stack in detached mode (with nginx as the reverse proxy):
    ```bash
-   docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data --profile nginx-deploy up -d
    ```
-5) Open streamlit UI via web-browser at `http://localhost:8501` to set and execute flow runs
-6) Monitor data storage using SQLite Browser via web-browser at `http://localhost:8081`
+5) Access the Streamlit UI via `http://localhost/` (or `https://localhost/` once TLS assets are placed in `./certs`)
+6) Access the Prefect UI at `http://localhost/prefect/` and, when the visualization profile is active, the SQLite Browser at `http://localhost/sqlite/`
 
 ---
 
@@ -80,10 +80,10 @@ To start the core data-pipeline profile only in detatched mode:
 docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core up -d
 ```
 
-Important container launches:
+Important container launches (add `--profile nginx-deploy` to expose the UI services through nginx on ports 80/443):
 
-- Streamlit UI — exposed on your host (default `http://localhost:8501`)
-- Prefect-server orchestrator — exposed on your host (default `http://localhost:4200`)
+- Streamlit UI — reachable through nginx at `http://localhost/` (or `https://localhost/` once TLS assets are configured)
+- Prefect-server orchestrator — reachable through nginx at `http://localhost/prefect/` (the service no longer binds to port 4200 on the host)
 - Prefect-serve – Prefect worker pool
 - PostgreSQL – metadata DB for Prefect
 - Redis – cache/queue for prefect (DB0) and memory buffer for SQLite writer-service (DB1)
@@ -98,7 +98,7 @@ docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core 
 
 Additional container launches:
 
-- SQLite Browser service for viewing `.db` files located at `Computer/data/` — exposed on your host (default `http://localhost:8081`)
+- SQLite Browser service for viewing `.db` files located at `Computer/data/` — reachable through nginx at `http://localhost/sqlite/` when the optional `datapipe-visualize-data` profile is active
 
 ### 4. Additional Launch, Verify, and Access Details
 
@@ -161,6 +161,28 @@ To copy database files to a local directory:
   ```
 
 Note: Container must be running.
+
+### Routing UI traffic through nginx
+
+Include `--profile nginx-deploy` whenever you want to surface the UI endpoints. The nginx service (configured via `nginx/conf.d/stockops.conf`) listens only on host ports 80/443 and proxies:
+
+- `/` → Streamlit UI (formerly port 8501)
+- `/prefect/` → Prefect server API/UI (formerly port 4200)
+- `/sqlite/` → SQLite Browser (formerly port 8081; only available when `datapipe-visualize-data` is active)
+
+Because the Streamlit/Prefect/SQLite containers no longer publish host ports directly, the nginx profile is the only way to reach them from outside the Docker network; services remain internal by default. The nginx container also mounts `./nginx/htpasswd` so you can add additional auth directives if needed.
+
+#### TLS certificates
+
+Before starting nginx you must place TLS assets under `./certs/live/<your-domain>/`, since `stockops.conf` expects `/etc/letsencrypt/live/stockops/fullchain.pem` and `privkey.pem`. For local testing you can generate a self-signed pair:
+
+```bash
+mkdir -p certs/live/localhost
+openssl req -x509 -newkey rsa:4096 -keyout certs/live/localhost/privkey.pem \
+  -out certs/live/localhost/fullchain.pem -days 365 -nodes -subj "/CN=localhost"
+```
+
+After you add your real domain, update `server_name` inside `nginx/conf.d/stockops.conf` and replace the certificate files with the ones issued for that domain. Nginx will refuse to start if the expected certificate files are missing, so keep the `./certs` tree in sync with your production deployment.
 
 ### Upgrading to a New Version
 
