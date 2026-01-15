@@ -38,12 +38,14 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
 1) Create an empty folder for deployment
 2) Download `docker-compose.vx.y.z.yml` from GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
 3) Create .env and set API token ([see instructions](#2-configure-environment))
-4) Launch full datapipeline stack in detached mode (with nginx as the reverse proxy):
+4) Launch full datapipeline stack in detached mode (nginx runs automatically):
    ```bash
-   docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data --profile nginx-deploy up -d
+   docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
    ```
 5) Access the Streamlit UI via `http://localhost/` (or `https://localhost/` once TLS assets are placed in `./certs`)
 6) Access the Prefect UI at `http://localhost/prefect/` and, when the visualization profile is active, the SQLite Browser at `http://localhost/sqlite/`
+
+Because nginx is defined in the baseline services block, it runs on every compose up so the UI endpoints stay behind the reverse proxy without requiring a special profile.
 
 ---
 
@@ -80,7 +82,7 @@ To start the core data-pipeline profile only in detatched mode:
 docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core up -d
 ```
 
-Important container launches (add `--profile nginx-deploy` to expose the UI services through nginx on ports 80/443):
+Important container launches (nginx now reverse-proxies the UI services on ports 80/443):
 
 - Streamlit UI — reachable through nginx at `http://localhost/` (or `https://localhost/` once TLS assets are configured)
 - Prefect-server orchestrator — reachable through nginx at `http://localhost/prefect/` (the service no longer binds to port 4200 on the host)
@@ -164,7 +166,7 @@ Note: Container must be running.
 
 ### Routing UI traffic through nginx
 
-Include `--profile nginx-deploy` whenever you want to surface the UI endpoints. The nginx service (configured via `nginx/conf.d/stockops.conf`) listens only on host ports 80/443 and proxies:
+The nginx service (configured via `nginx/conf.d/stockops.conf`) listens only on host ports 80/443 and proxies:
 
 - `/` → Streamlit UI (formerly port 8501)
 - `/prefect/` → Prefect server API/UI (formerly port 4200)
