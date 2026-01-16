@@ -1,6 +1,6 @@
 # StockOps Local with Docker Compose
 
-This directory provides a **Docker Compose** setup for running **StockOps** locally.
+This directory provides a **Docker Compose** setup for running **StockOps** locally and in production.
 It pulls pre-built, pinned images released to **GitHub Container Registry (GHCR)** for quick deployment or evaluation without cloning the repository.
 
 ---
@@ -11,6 +11,7 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
 
 ### Execution Summary
 - User created .env file sets API provider keys
+- User sets TLS certificates for production as needed
 - Available providers set to Streamlit UI
 - Streamlit UI sets historical or streaming data paradigms called "deployments"
 - Prefect flow runs (executions of deployments) are either triggered (live) or scheduled by user via Streamlit UI
@@ -35,17 +36,18 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
 ---
 
 ## Quickstart
+Pass the desired nginx profile flag every time you run `docker compose` so nginx loads the correct certificate bundle: add `--profile nginx-prod` for the production config or `--profile nginx-local` for the self-signed `stockops.local` setup, in addition to the `datapipe-*` profiles. You must choose exactly one of the two nginx profiles so only the matching nginx container starts.
 1) Create an empty folder for deployment
 2) Download `docker-compose.vx.y.z.yml` from GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
 3) Create .env and set API token ([see instructions](#2-configure-environment))
-4) Launch full datapipeline stack in detached mode (nginx runs automatically):
+4) Set TLS certificates ([see instructions](#tls-certificates))
+5) Launch full datapipeline stack in detached mode:
    ```bash
-   docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data --profile nginx-prod up -d
    ```
-5) Access the Streamlit UI via `http://localhost/` (or `https://localhost/` once TLS assets are placed in `./certs`)
-6) Access the Prefect UI at `http://localhost/prefect/` and, when the visualization profile is active, the SQLite Browser at `http://localhost/sqlite/`
-
-Because nginx is defined in the baseline services block, it runs on every compose up so the UI endpoints stay behind the reverse proxy without requiring a special profile.
+  (Production launches assume `--profile nginx-prod` is included so that `nginx/conf.d/stockops-prod.conf` loads. Replace that flag with `--profile nginx-local` if you want the `nginx-local` service and self-signed `stockops.local` certs instead.)
+6) Access the Streamlit UI via `http://localhost/` (or `https://localhost/` once TLS assets are placed in `./certs`; see the TLS certificates section below for how to generate them)
+7) Access the Prefect UI at `http://localhost/prefect/` and, when the visualization profile is active, the SQLite Browser at `http://localhost/sqlite/`
 
 ---
 
@@ -64,8 +66,11 @@ Create an .env in the same directory as the compose file.  File should contain e
 cat > .env << 'EOF'
 # Set provider tokens here:
 EODHD_API_TOKEN=__PUT_YOUR_TOKEN_HERE__
+PRODUCTION_DOMAIN=your.production.domain
 EOF
 ```
+
+`PRODUCTION_DOMAIN` is used by the `nginx-prod` profile to generate the `server_name` and certificate paths inside `nginx/conf.d/stockops-prod.conf`, so keep it in sync with whatever certificate bundle you drop under `./certs/live/<your-domain>/`.
 
 Note: Your .env stays local and is never pushed to GitHub.
 
@@ -79,13 +84,13 @@ StockOps is currently capable of interacting with the following providers:
 To start the core data-pipeline profile only in detatched mode:
 
 ```bash
-docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core up -d
+docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile nginx-prod up -d
 ```
 
 Important container launches (nginx now reverse-proxies the UI services on ports 80/443):
 
 - Streamlit UI — reachable through nginx at `http://localhost/` (or `https://localhost/` once TLS assets are configured)
-- Prefect-server orchestrator — reachable through nginx at `http://localhost/prefect/` (the service no longer binds to port 4200 on the host)
+- Prefect-server orchestrator — reachable through nginx at `http://localhost/prefect/`
 - Prefect-serve – Prefect worker pool
 - PostgreSQL – metadata DB for Prefect
 - Redis – cache/queue for prefect (DB0) and memory buffer for SQLite writer-service (DB1)
@@ -95,7 +100,7 @@ Important container launches (nginx now reverse-proxies the UI services on ports
 Start the main + visualization data-pipeline profile in detatched mode:
 
 ```bash
-docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data --profile nginx-prod up -d
 ```
 
 Additional container launches:
@@ -166,32 +171,49 @@ Note: Container must be running.
 
 ### Routing UI traffic through nginx
 
-The nginx service (configured via `nginx/conf.d/stockops.conf`) listens only on host ports 80/443 and proxies:
+Responsibility for TLS is handled by whichever nginx profile you include via `--profile`: `--profile nginx-prod` loads `nginx/conf.d/stockops-prod.conf` (update `server_name` and the `/etc/letsencrypt/live/<your-domain>` paths inside that file to match your production domain/Certbot bundle), while `--profile nginx-local` loads `nginx/conf.d/stockops-local.conf` (which already targets `stockops.local` and the local self-signed certs under `./certs/live/stockops.local`). Only the nginx container for the supplied profile starts, so there is no port conflict.
 
-- `/` → Streamlit UI (formerly port 8501)
-- `/prefect/` → Prefect server API/UI (formerly port 4200)
-- `/sqlite/` → SQLite Browser (formerly port 8081; only available when `datapipe-visualize-data` is active)
+The active nginx service listens only on host ports 80/443 and proxies:
 
-Because the Streamlit/Prefect/SQLite containers no longer publish host ports directly, the nginx profile is the only way to reach them from outside the Docker network; services remain internal by default. The nginx container also mounts `./nginx/htpasswd` so you can add additional auth directives if needed.
+A dedicated listener on port 80 immediately issues `301 https://$host$request_uri`, so all external traffic is funneled through the TLS listener on port 443 before reaching the proxy locations.
+
+- `/` → Streamlit UI
+- `/prefect/` → Prefect server API/UI
+- `/sqlite/` → SQLite Browser (only available when `datapipe-visualize-data` is active)
+
+The nginx profile is the only way to reach services from outside the Docker network; services remain internal by default. The nginx container also mounts `./nginx/htpasswd` so you can add additional auth directives if needed.
 
 #### TLS certificates
 
-Before starting nginx you must place TLS assets under `./certs/live/<your-domain>/`, since `stockops.conf` expects `/etc/letsencrypt/live/stockops/fullchain.pem` and `privkey.pem`. For local testing you can generate a self-signed pair:
+TLS files are stored under `./certs/live/<your-domain>` and are mounted straight into nginx. The `nginx-prod` profile loads `nginx/conf.d/stockops-prod.conf`, so update its `server_name` and `ssl_certificate`/`ssl_certificate_key` entries to reflect your public domain and certificate path. The `nginx-local` profile loads `nginx/conf.d/stockops-local.conf`, which already targets `stockops.local` and the self-signed files under `./certs/live/stockops.local`. That local pair is committed so the repo contains a 100-year placeholder cert you can use without re-generating; because `.gitignore` still blocks all other paths under `certs/live/`, you can safely drop production certs into `./certs/live/stockops.prod/<your.production.domain>` subfolder without those files being picked up or committed.
+
+If you ever need to rebuild the local certificate (for example to change the subject), rerun the long-lived self-signed command:
 
 ```bash
-mkdir -p certs/live/localhost
-openssl req -x509 -newkey rsa:4096 -keyout certs/live/localhost/privkey.pem \
-  -out certs/live/localhost/fullchain.pem -days 365 -nodes -subj "/CN=localhost"
+openssl req -x509 -nodes -newkey rsa:4096 \
+  -keyout certs/live/stockops.local/privkey.pem \
+  -out certs/live/stockops.local/fullchain.pem \
+  -days 36500 -subj "/CN=stockops.local"
 ```
 
-After you add your real domain, update `server_name` inside `nginx/conf.d/stockops.conf` and replace the certificate files with the ones issued for that domain. Nginx will refuse to start if the expected certificate files are missing, so keep the `./certs` tree in sync with your production deployment.
+Then make `stockops.local` resolve to your machine:
+
+```bash
+echo "127.0.0.1 stockops.local" | sudo tee -a /etc/hosts
+```
+
+For production deployments,
+
+
+
+For production create a `./certs/live/stockops.prod/<your.production.domain>` subfolder, and then add certificates issued to your real domain (e.g., via Certbot), to that folder. `PRODUCTION_DOMAIN` in your `.env` must match that subfolder name. Because the certs directory is ignored except for the tracked `stockops.local` pair, regenerate or re-sync them on every clone or whenever the certs rotate.
 
 ### Upgrading to a New Version
 
 1. Download the new pinned compose (e.g. docker-compose.v1.3.0.yml).
    - Reuse your existing .env (only update if release notes add variables).
 2. For minimal interruption of service that is currently running:
-   ```bash
-   docker compose -p datapipe -f docker-compose.v1.3.0.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+  ```bash
+  docker compose -p datapipe -f docker-compose.v1.3.0.yml --profile datapipe-core --profile datapipe-visualize-data --profile nginx-prod up -d
    ```
    - Docker compares the images deployed in the current run to those in the new compose version, updates as needed, and restarts any updated containers.  All named volumes—and therefore your data—are preserved.

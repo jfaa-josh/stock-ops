@@ -50,19 +50,38 @@ services:
       timeout: 5s                                     # Timeout per check
       retries: 5                                      # Number of retries before marking unhealthy
 
-  nginx:                                             # Reverse proxy for UI services -> single entrypoint
+  nginx-prod:                                             # Reverse proxy for UI services -> single entrypoint
     image: nginx:alpine                               # Small, performance-tuned nginx base image
     container_name: nginx                             # Fixed container name for easier docker ps grepping
+    <<: *common-envfile
     depends_on:
       - streamlit                                     # Delay nginx until the Streamlit UI is ready
     ports:
       - "80:80"                                       # Serve HTTP on host port 80
       - "443:443"                                     # Serve HTTPS on host port 443
+    profiles: ["nginx-prod"]
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro           # Load nginx server blocks from repo (read-only)
-      - ./certs:/etc/letsencrypt:ro                   # TLS certs (sync with stockops.conf expectations)
+      - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
+      - ./nginx/conf.d/stockops-prod.conf:/etc/nginx/conf.d/stockops.conf:ro
+      - ./certs/live/stockops.prod:/etc/letsencrypt:ro                   # TLS certs (sync with stockops.conf expectations)
       - ./nginx/htpasswd:/etc/nginx/htpasswd:ro       # Optional htpasswd for basic auth on proxied routes
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
+
+  nginx-local:
+    image: nginx:alpine
+    container_name: nginx-local
+    depends_on:
+      - streamlit
+    ports:
+      - "80:80"
+      - "443:443"
+    profiles: ["nginx-local"]
+    volumes:
+      - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
+      - ./nginx/conf.d/stockops-local.conf:/etc/nginx/conf.d/stockops.conf:ro
+      - ./certs/live/stockops.local:/etc/letsencrypt:ro
+      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+    restart: unless-stopped
 
   ###DATA PIPELINE CORE SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
   writer-service:                                     # Defines the buffer & sqlite writer-service container
@@ -82,7 +101,7 @@ services:
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
     environment:                                      # Define environment variables for the container
       <<: *common-envvars                             # Inherit common environment variables
-      REDIS_URL: redis://redis:6379/1                 # Redis connex URL (host:port/db) (use DB1; prefect uses DB0)
+      REDIS_URL: redis://redis:6379/1                 # Internal redis connex URL (host:port/db) (use DB1; prefect uses DB0)
       PYTHONDONTWRITEBYTECODE: 1                      # Prevents Python from writing __pycache__ clutter to container
       PYTHONUNBUFFERED: 1                             # Forces stdout/stderr logs to flush -> `docker logs` in real time
       BUFFER_STREAM: buf:ingest                       # Name of the Redis stream used for buffering ingest data
@@ -117,13 +136,13 @@ services:
       # Connection string for Prefect → Postgres:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       PREFECT_SERVER_API_HOST: 0.0.0.0                # Listen on every network interface
-      PREFECT_API_URL: http://prefect-server:4200/api  # Internal API URL for Prefect services
-      PREFECT_UI_API_URL: http://localhost:4200/api   # Browser‐visible UI endpoint http://localhost:4200
+      PREFECT_API_URL: http://prefect-server:4200/api  # Internal API URL for Prefect services (not host-exposed)
+      PREFECT_UI_API_URL: http://localhost:4200/api   # Internal Prefect UI endpoint (reachable only via nginx proxy)
       PREFECT_LOGGING_LEVEL: DEBUG                    # Verbose logs for debugging
       PREFECT_MESSAGING_BROKER: prefect_redis.messaging   # Broker config for Prefect messaging
       PREFECT_MESSAGING_CACHE: prefect_redis.messaging    # Cache config for messaging
       PREFECT_REDIS_MESSAGING_HOST: redis             # Redis hostname for messaging
-      PREFECT_REDIS_MESSAGING_PORT: 6379              # Redis port
+      PREFECT_REDIS_MESSAGING_PORT: 6379              # Docker internal Redis port
       PREFECT_REDIS_MESSAGING_DB: 0                   # Redis DB index
     depends_on:
       postgres:
