@@ -189,7 +189,10 @@ We commit a sample `./nginx/htpasswd` file prepopulated with the `localadmin` us
 
 #### TLS certificates
 
-TLS files are stored under `./certs/live/<your-domain>` and are mounted straight into nginx. The `nginx-prod` profile loads `nginx/conf.d/stockops-prod.conf`, so update its `server_name` and `ssl_certificate`/`ssl_certificate_key` entries to reflect your public domain and certificate path. The `nginx-local` profile loads `nginx/conf.d/stockops-local.conf`, which already targets `stockops.local` and the self-signed files under `./certs/live/stockops.local`. That local pair is committed so the repo contains a 100-year placeholder cert you can use without re-generating; because `.gitignore` still blocks all other paths under `certs/live/`, you can safely drop production certs into `./certs/live/stockops.prod/<your.production.domain>` subfolder without those files being picked up or committed.
+TLS files are stored under `./certs/live/<your-domain>` and are mounted straight into nginx. The `nginx-prod` profile loads `nginx/conf.d/stockops-prod.conf`, so update its `server_name` and `ssl_certificate`/`ssl_certificate_key` entries to reflect your public domain and certificate path.
+
+##### Local
+The `nginx-local` profile loads `nginx/conf.d/stockops-local.conf`, which already targets `stockops.local` and the self-signed files under `./certs/live/stockops.local`. That local pair is committed so the repo contains a 100-year placeholder cert you can use without re-generating. If desired, no modifications are required for local deployment.
 
 If you ever need to rebuild the local certificate (for example to change the subject), rerun the long-lived self-signed command:
 
@@ -206,11 +209,10 @@ Then make `stockops.local` resolve to your machine:
 echo "127.0.0.1 stockops.local" | sudo tee -a /etc/hosts
 ```
 
-For production deployments,
+##### Production
+For the `nginx-prod` profile, you need to generate and maintain TLS certificates. Since `.gitignore` still blocks all other paths under `certs/live/`, you can place production certs in `./certs/live/stockops.prod/<your.production.domain>` without them being picked up or committed.
 
-
-
-For production create a `./certs/live/stockops.prod/<your.production.domain>` subfolder, and then add certificates issued to your real domain (e.g., via Certbot), to that folder. `PRODUCTION_DOMAIN` in your `.env` must match that subfolder name. Because the certs directory is ignored except for the tracked `stockops.local` pair, regenerate or re-sync them on every clone or whenever the certs rotate.
+Create `./certs/live/stockops.prod/<your.production.domain>`, then copy in the certs issued for your real domain (e.g., via Certbot). Set `PRODUCTION_DOMAIN` in `.env` to exactly match that subfolder name. Because the certs directory is ignored except for the tracked `stockops.local` pair, regenerate or re-sync the production certs on each clone and whenever the certs rotate.
 
 ### Upgrading to a New Version
 
