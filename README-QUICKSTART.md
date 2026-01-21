@@ -46,8 +46,9 @@ Pass the desired nginx profile flag every time you run `docker compose` so nginx
    docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data --profile nginx-prod up -d
    ```
   (Production launches assume `--profile nginx-prod` is included so that `nginx/conf.d/stockops-prod.conf` loads. Replace that flag with `--profile nginx-local` if you want the `nginx-local` service and self-signed `stockops.local` certs instead.)
-6) Access the Streamlit UI via `http://localhost/` (or `https://localhost/` once TLS assets are placed in `./certs`; see the TLS certificates section below for how to generate them)
-7) Access the Prefect UI at `http://localhost/prefect/` and, when the visualization profile is active, the SQLite Browser at `http://localhost/sqlite/`
+6) Access the UI:
+   - Local: `https://stockops.local/`
+   - Production: FILL THIS OUT!!!
 
 ---
 
@@ -89,8 +90,12 @@ docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core 
 
 Important container launches (nginx now reverse-proxies the UI services on ports 80/443):
 
-- Streamlit UI — reachable through nginx at `http://localhost/` (or `https://localhost/` once TLS assets are configured)
-- Prefect-server orchestrator — reachable through nginx at `http://localhost/prefect/`
+- Streamlit UI — reachable through nginx:
+  - Local: `https://stockops.local/`
+  - Production: FILL THIS OUT!!!
+- Prefect-server orchestrator — reachable through nginx:
+  - Local: `https://stockops.local/prefect/`
+  - Production: FILL THIS OUT!!!
 - Prefect-serve – Prefect worker pool
 - PostgreSQL – metadata DB for Prefect
 - Redis – cache/queue for prefect (DB0) and memory buffer for SQLite writer-service (DB1)
@@ -105,7 +110,9 @@ docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core 
 
 Additional container launches:
 
-- SQLite Browser service for viewing `.db` files located at `Computer/data/` — reachable through nginx at `http://localhost/sqlite/` when the optional `datapipe-visualize-data` profile is active
+- SQLite Browser service for viewing `.db` files located at `Computer/data/` — reachable through nginx when the optional `datapipe-visualize-data` profile is active:
+  - Local: `https://stockops.local/sqlite/`
+  - Production: FILL THIS OUT!!!
 
 ### 4. Additional Launch, Verify, and Access Details
 
@@ -183,9 +190,9 @@ A dedicated listener on port 80 immediately issues `301 https://$host$request_ur
 
 The nginx profile is the only way to reach services from outside the Docker network; services remain internal by default. The nginx container also mounts `./nginx/htpasswd` so you can add additional auth directives if needed.
 
-#### Optional basic authorization
+#### Basic authorization
 
-We commit a sample `./nginx/htpasswd` file prepopulated with the `localadmin` user so you can enable basic auth in either nginx profile without generating a password file first. The nginx service still mounts the same file regardless of the nginx local or production service run via docker profile. Change the password with `htpasswd -Bnginx/htpasswd localadmin` or create additional users with `htpasswd -b nginx/htpasswd <user> <password>` if you prefer.
+We commit a sample `./nginx/htpasswd` file prepopulated with the `localadmin` user so you can enable basic auth in either nginx profile without generating a password file first. The nginx service still mounts the same file regardless of the nginx local or production service run via docker profile. Change the password with `htpasswd -B nginx/htpasswd localadmin` or create additional users with `htpasswd -B nginx/htpasswd <new user>` where you will then be prompted for a password.
 
 #### TLS certificates
 
@@ -194,6 +201,15 @@ TLS files are stored under `./certs/live/<your-domain>` and are mounted straight
 ##### Local
 The `nginx-local` profile loads `nginx/conf.d/stockops-local.conf`, which already targets `stockops.local` and the self-signed files under `./certs/live/stockops.local`. That local pair is committed so the repo contains a 100-year placeholder cert you can use without re-generating. If desired, no modifications are required for local deployment.
 
+The provided local pair has no CA; in order to avoid browser rejecting the certificate pair as untrustworthy, import into whatever trust store your OS/browser relies on. Example for WSL/Linux:
+```bash
+sudo mkdir -p /usr/local/share/ca-certificates
+sudo cp ./certs/live/stockops.local/fullchain.pem /usr/local/share/ca-certificates/stockops.local.crt
+cd ~ && sudo update-ca-certificates
+```
+
+After adding the certificates to your trust store, you must then resolve stockops.local to 127.0.0.1.
+
 If you ever need to rebuild the local certificate (for example to change the subject), rerun the long-lived self-signed command:
 
 ```bash
@@ -201,12 +217,6 @@ openssl req -x509 -nodes -newkey rsa:4096 \
   -keyout certs/live/stockops.local/privkey.pem \
   -out certs/live/stockops.local/fullchain.pem \
   -days 36500 -subj "/CN=stockops.local"
-```
-
-Then make `stockops.local` resolve to your machine:
-
-```bash
-echo "127.0.0.1 stockops.local" | sudo tee -a /etc/hosts
 ```
 
 ##### Production

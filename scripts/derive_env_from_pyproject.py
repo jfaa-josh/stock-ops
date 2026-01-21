@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 ENV_PATH = ".env"
+PREFECT_UI_SERVE_BASE_VALUE = "/prefect"
+PREFECT_UI_API_URL_VALUE = "https://stockops.local/api"
 
 def get_python_version_truncated():
     with open(".python-version", "r") as f:
@@ -18,7 +20,12 @@ def get_prefect_version(pyproject_path: str = "pyproject.toml"):
                 return parts[1]
     return None
 
-def update_env_file(python_version: str, prefect_version: str | None):
+def update_env_file(
+    python_version: str,
+    prefect_version: str | None,
+    ui_serve_base: str = PREFECT_UI_SERVE_BASE_VALUE,
+    ui_api_url: str = PREFECT_UI_API_URL_VALUE,
+):
     try:
         with open(ENV_PATH, "r") as f:
             lines = f.readlines()
@@ -42,6 +49,12 @@ def update_env_file(python_version: str, prefect_version: str | None):
         elif key == "PREFECT_VERSION" and prefect_version:
             new_lines.append(f"PREFECT_VERSION={prefect_version}\n")
             found_keys.add(key)
+        elif key == "PREFECT_UI_SERVE_BASE":
+            new_lines.append(f"PREFECT_UI_SERVE_BASE={ui_serve_base}\n")
+            found_keys.add(key)
+        elif key == "PREFECT_UI_API_URL":
+            new_lines.append(f"PREFECT_UI_API_URL={ui_api_url}\n")
+            found_keys.add(key)
         else:
             new_lines.append(line)
 
@@ -49,6 +62,10 @@ def update_env_file(python_version: str, prefect_version: str | None):
         new_lines.append(f"PYTHON_VERSION={python_version}\n")
     if prefect_version and "PREFECT_VERSION" not in found_keys:
         new_lines.append(f"PREFECT_VERSION={prefect_version}\n")
+    if "PREFECT_UI_SERVE_BASE" not in found_keys:
+        new_lines.append(f"PREFECT_UI_SERVE_BASE={ui_serve_base}\n")
+    if "PREFECT_UI_API_URL" not in found_keys:
+        new_lines.append(f"PREFECT_UI_API_URL={ui_api_url}\n")
 
     with open(ENV_PATH, "w") as f:
         f.writelines(new_lines)

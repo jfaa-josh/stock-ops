@@ -137,7 +137,7 @@ services:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       PREFECT_SERVER_API_HOST: 0.0.0.0                # Listen on every network interface
       PREFECT_API_URL: http://prefect-server:4200/api  # Internal API URL for Prefect services (not host-exposed)
-      PREFECT_UI_API_URL: http://localhost:4200/api   # Internal Prefect UI endpoint (reachable only via nginx proxy)
+      PREFECT_UI_API_URL: ${PREFECT_UI_API_URL}        # UI uses the proxy URL exposed to the browser
       PREFECT_LOGGING_LEVEL: DEBUG                    # Verbose logs for debugging
       PREFECT_MESSAGING_BROKER: prefect_redis.messaging   # Broker config for Prefect messaging
       PREFECT_MESSAGING_CACHE: prefect_redis.messaging    # Cache config for messaging
