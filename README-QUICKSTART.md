@@ -183,6 +183,10 @@ A dedicated listener on port 80 immediately issues `301 https://$host$request_ur
 
 The nginx profile is the only way to reach services from outside the Docker network; services remain internal by default. The nginx container also mounts `./nginx/htpasswd` so you can add additional auth directives if needed.
 
+#### Optional basic authorization
+
+We commit a sample `./nginx/htpasswd` file prepopulated with the `localadmin` user so you can enable basic auth in either nginx profile without generating a password file first. The nginx service still mounts the same file regardless of the nginx local or production service run via docker profile. Change the password with `htpasswd -Bnginx/htpasswd localadmin` or create additional users with `htpasswd -b nginx/htpasswd <user> <password>` if you prefer.
+
 #### TLS certificates
 
 TLS files are stored under `./certs/live/<your-domain>` and are mounted straight into nginx. The `nginx-prod` profile loads `nginx/conf.d/stockops-prod.conf`, so update its `server_name` and `ssl_certificate`/`ssl_certificate_key` entries to reflect your public domain and certificate path. The `nginx-local` profile loads `nginx/conf.d/stockops-local.conf`, which already targets `stockops.local` and the self-signed files under `./certs/live/stockops.local`. That local pair is committed so the repo contains a 100-year placeholder cert you can use without re-generating; because `.gitignore` still blocks all other paths under `certs/live/`, you can safely drop production certs into `./certs/live/stockops.prod/<your.production.domain>` subfolder without those files being picked up or committed.
