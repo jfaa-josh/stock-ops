@@ -59,6 +59,7 @@ pip-selfcheck.json
 .secret
 secrets.*
 credentials.*
+nginx/prod/htpasswd
 
 # ======================
 # TLS certs generated locally

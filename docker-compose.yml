@@ -55,17 +55,26 @@ services:
     container_name: nginx                             # Fixed container name for easier docker ps grepping
     <<: *common-envfile
     depends_on:
-      - streamlit                                     # Delay nginx until the Streamlit UI is ready
+      init-htpasswd-prod:
+        condition: service_completed_successfully
+      streamlit:
+        condition: service_started                    # Delay nginx until the Streamlit UI is ready
     ports:
       - "80:80"                                       # Serve HTTP on host port 80
       - "443:443"                                     # Serve HTTPS on host port 443
     profiles: ["nginx-prod"]
     volumes:
       - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
-      - ./nginx/conf.d/stockops-prod.conf:/etc/nginx/conf.d/stockops.conf:ro
+      - ./nginx/conf.d/stockops-prod.conf.template:/etc/nginx/templates/stockops.conf.template:ro
       - ./certs/live/stockops.prod:/etc/letsencrypt:ro                   # TLS certs (sync with stockops.conf expectations)
-      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro       # Optional htpasswd for basic auth on proxied routes
+      - ./nginx/prod:/etc/nginx/prod:ro  # Production htpasswd (created on first run)
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   nginx-local:
     image: nginx:alpine
@@ -80,8 +89,14 @@ services:
       - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
       - ./nginx/conf.d/stockops-local.conf:/etc/nginx/conf.d/stockops.conf:ro
       - ./certs/live/stockops.local:/etc/letsencrypt:ro
-      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+      - ./nginx/htpasswd-local:/etc/nginx/htpasswd:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   ###DATA PIPELINE CORE SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
   writer-service:                                     # Defines the buffer & sqlite writer-service container
@@ -240,6 +255,17 @@ services:
     security_opt:
       - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies run properly
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
+
+  init-htpasswd-prod:
+    image: httpd:2.4-alpine
+    profiles: ["nginx-prod"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./nginx/prod:/etc/nginx-prod:rw
+      - ./scripts:/scripts:ro
+    command: ["/bin/sh", "-c", "/bin/sh /scripts/init-htpasswd-prod.sh /etc/nginx-prod/htpasswd"]
+    restart: "no"
 
 volumes:                                              # Named Docker volumes for data persistence
   postgres_data:                                      # Holds Postgres data directory

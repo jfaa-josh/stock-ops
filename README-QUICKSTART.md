@@ -45,7 +45,7 @@ Pass the desired nginx profile flag every time you run `docker compose` so nginx
    ```bash
    docker compose -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data --profile nginx-prod up -d
    ```
-  (Production launches assume `--profile nginx-prod` is included so that `nginx/conf.d/stockops-prod.conf` loads. Replace that flag with `--profile nginx-local` if you want the `nginx-local` service and self-signed `stockops.local` certs instead.)
+(Production launches assume `--profile nginx-prod` is included so that `nginx/conf.d/stockops-prod.conf.template` renders with `PRODUCTION_DOMAIN`. Replace that flag with `--profile nginx-local` if you want the `nginx-local` service and self-signed `stockops.local` certs instead.)
 6) Access the UI:
    - Local: `https://stockops.local/`
    - Production: FILL THIS OUT!!!
@@ -71,7 +71,7 @@ PRODUCTION_DOMAIN=your.production.domain
 EOF
 ```
 
-`PRODUCTION_DOMAIN` is used by the `nginx-prod` profile to generate the `server_name` and certificate paths inside `nginx/conf.d/stockops-prod.conf`, so keep it in sync with whatever certificate bundle you drop under `./certs/live/<your-domain>/`.
+`PRODUCTION_DOMAIN` is used by the `nginx-prod` profile to generate the `server_name` and certificate paths inside `nginx/conf.d/stockops-prod.conf.template`, so keep it in sync with whatever certificate bundle you drop under `./certs/live/<your-domain>/`.
 
 Note: Your .env stays local and is never pushed to GitHub.
 
@@ -178,7 +178,7 @@ Note: Container must be running.
 
 ### Routing UI traffic through nginx
 
-Responsibility for TLS is handled by whichever nginx profile you include via `--profile`: `--profile nginx-prod` loads `nginx/conf.d/stockops-prod.conf` (update `server_name` and the `/etc/letsencrypt/live/<your-domain>` paths inside that file to match your production domain/Certbot bundle), while `--profile nginx-local` loads `nginx/conf.d/stockops-local.conf` (which already targets `stockops.local` and the local self-signed certs under `./certs/live/stockops.local`). Only the nginx container for the supplied profile starts, so there is no port conflict.
+Responsibility for TLS is handled by whichever nginx profile you include via `--profile`: `--profile nginx-prod` renders `nginx/conf.d/stockops-prod.conf.template` using `PRODUCTION_DOMAIN`, while `--profile nginx-local` loads `nginx/conf.d/stockops-local.conf` (which already targets `stockops.local` and the local self-signed certs under `./certs/live/stockops.local`). Only the nginx container for the supplied profile starts, so there is no port conflict.
 
 The active nginx service listens only on host ports 80/443 and proxies:
 
@@ -188,15 +188,17 @@ A dedicated listener on port 80 immediately issues `301 https://$host$request_ur
 - `/prefect/` → Prefect server API/UI
 - `/sqlite/` → SQLite Browser (only available when `datapipe-visualize-data` is active)
 
-The nginx profile is the only way to reach services from outside the Docker network; services remain internal by default. The nginx container also mounts `./nginx/htpasswd` so you can add additional auth directives if needed.
+The nginx profile is the only way to reach services from outside the Docker network; services remain internal by default. The nginx container mounts a local auth file for `nginx-local` and a separate production auth file for `nginx-prod`.
 
 #### Basic authorization
 
-We commit a sample `./nginx/htpasswd` file prepopulated with the `localadmin` user so you can enable basic auth in either nginx profile without generating a password file first. The nginx service still mounts the same file regardless of the nginx local or production service run via docker profile. Change the password with `htpasswd -B nginx/htpasswd localadmin` or create additional users with `htpasswd -B nginx/htpasswd <new user>` where you will then be prompted for a password.
+We commit `./nginx/htpasswd-local` prepopulated with the `localadmin` user for the `nginx-local` profile. Change the password with `htpasswd -B nginx/htpasswd-local localadmin` or create additional users with `htpasswd -B nginx/htpasswd-local <new user>`.
+
+For production, `nginx-prod` uses `./nginx/prod/htpasswd` (gitignored). The first time you start `nginx-prod`, an init container runs `scripts/init-htpasswd-prod.sh`, prompts you for a password, and creates the file for the `produser` account. Run the initial startup without `-d` so the prompt can appear.
 
 #### TLS certificates
 
-TLS files are stored under `./certs/live/<your-domain>` and are mounted straight into nginx. The `nginx-prod` profile loads `nginx/conf.d/stockops-prod.conf`, so update its `server_name` and `ssl_certificate`/`ssl_certificate_key` entries to reflect your public domain and certificate path.
+TLS files are stored under `./certs/live/<your-domain>` and are mounted straight into nginx. The `nginx-prod` profile renders `nginx/conf.d/stockops-prod.conf.template` using `PRODUCTION_DOMAIN`, so set that env var to match your public domain and certificate folder name.
 
 ##### Local
 The `nginx-local` profile loads `nginx/conf.d/stockops-local.conf`, which already targets `stockops.local` and the self-signed files under `./certs/live/stockops.local`. That local pair is committed so the repo contains a 100-year placeholder cert you can use without re-generating. If desired, no modifications are required for local deployment.
