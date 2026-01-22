@@ -3,7 +3,7 @@ name: stockops
 # Grab .env file for environment variables
 x-common-envfile: &common-envfile
   env_file:
-    - .env
+    - ${ENV_FILE:-.env}
 
 # Anchor for the shared Prefect env vars
 x-common-envvars: &common-envvars
@@ -55,6 +55,8 @@ services:
     container_name: nginx                             # Fixed container name for easier docker ps grepping
     <<: *common-envfile
     depends_on:
+      certbot-init:
+        condition: service_completed_successfully
       init-htpasswd-prod:
         condition: service_completed_successfully
       streamlit:
@@ -67,8 +69,11 @@ services:
       - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
       - ./nginx/conf.d/stockops-prod.conf.template:/etc/nginx/templates/stockops.conf.template:ro
       - ./certs/live/stockops.prod:/etc/letsencrypt:ro                   # TLS certs (sync with stockops.conf expectations)
+      - ./certs/www:/var/www/certbot:ro
       - ./nginx/prod:/etc/nginx/prod:ro  # Production htpasswd (created on first run)
+      - ./scripts:/scripts:ro
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
+    command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec nginx -g 'daemon off;'"]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 10s
@@ -152,7 +157,8 @@ services:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       PREFECT_SERVER_API_HOST: 0.0.0.0                # Listen on every network interface
       PREFECT_API_URL: http://prefect-server:4200/api  # Internal API URL for Prefect services (not host-exposed)
-      PREFECT_UI_API_URL: ${PREFECT_UI_API_URL}        # UI uses the proxy URL exposed to the browser
+      PREFECT_UI_SERVE_BASE: ${PREFECT_UI_SERVE_BASE:-/prefect}  # Base path for the UI
+      PREFECT_UI_API_URL: ${PREFECT_UI_API_URL:-https://stockops.local/api}  # UI uses proxy URL
       PREFECT_LOGGING_LEVEL: DEBUG                    # Verbose logs for debugging
       PREFECT_MESSAGING_BROKER: prefect_redis.messaging   # Broker config for Prefect messaging
       PREFECT_MESSAGING_CACHE: prefect_redis.messaging    # Cache config for messaging
@@ -266,6 +272,32 @@ services:
       - ./scripts:/scripts:ro
     command: ["/bin/sh", "-c", "/bin/sh /scripts/init-htpasswd-prod.sh /etc/nginx-prod/htpasswd"]
     restart: "no"
+
+  certbot-init:
+    image: certbot/certbot:latest
+    profiles: ["nginx-prod"]
+    <<: *common-envfile
+    ports:
+      - "80:80"
+    volumes:
+      - ./certs/live/stockops.prod:/etc/letsencrypt:rw
+      - ./scripts:/scripts:ro
+    command: ["/bin/sh", "-c", "/bin/sh /scripts/certbot-init.sh"]
+    restart: "no"
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["nginx-prod"]
+    depends_on:
+      nginx-prod:
+        condition: service_started
+    <<: *common-envfile
+    volumes:
+      - ./certs/live/stockops.prod:/etc/letsencrypt:rw
+      - ./certs/www:/var/www/certbot:rw
+      - ./scripts:/scripts:ro
+    command: ["/bin/sh", "-c", "/bin/sh /scripts/certbot-renew.sh"]
+    restart: unless-stopped
 
 volumes:                                              # Named Docker volumes for data persistence
   postgres_data:                                      # Holds Postgres data directory

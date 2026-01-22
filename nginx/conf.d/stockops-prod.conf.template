@@ -32,7 +32,7 @@ server {
   proxy_read_timeout 120;
 
   location /.well-known/acme-challenge/ {
-    root /etc/letsencrypt;
+    root /var/www/certbot;
     allow all;
   }
 

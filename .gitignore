@@ -68,6 +68,8 @@ certs/live/**/*.pem
 certs/live/**/*.key
 !certs/live/stockops.local/
 !certs/live/stockops.local/*
+certs/www/**
+!certs/www/.gitkeep
 
 # ======================
 # Jupyter & IPython
