@@ -282,7 +282,8 @@ services:
     volumes:
       - ./certs/live/stockops.prod:/etc/letsencrypt:rw
       - ./scripts:/scripts:ro
-    command: ["/bin/sh", "-c", "/bin/sh /scripts/certbot-init.sh"]
+    entrypoint: ["/bin/sh", "-c"]
+    command: "/scripts/certbot-init.sh"
     restart: "no"
 
   certbot:
@@ -296,7 +297,8 @@ services:
       - ./certs/live/stockops.prod:/etc/letsencrypt:rw
       - ./certs/www:/var/www/certbot:rw
       - ./scripts:/scripts:ro
-    command: ["/bin/sh", "-c", "/bin/sh /scripts/certbot-renew.sh"]
+    entrypoint: ["/bin/sh", "-c"]
+    command: "/scripts/certbot-renew.sh"
     restart: unless-stopped
 
 volumes:                                              # Named Docker volumes for data persistence
