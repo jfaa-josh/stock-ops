@@ -9,6 +9,10 @@ fi
 
 shift
 
+if [ -z "${PRODUCTION_DOMAIN:-}" ] && [ -f ".env" ]; then
+  PRODUCTION_DOMAIN="$(sed -n 's/^PRODUCTION_DOMAIN=//p' .env | tail -n 1)"
+fi
+
 if [ "$MODE" = "local" ]; then
   PREFECT_UI_API_URL="https://stockops.local/api"
   PROFILE_DEFAULT="--profile nginx-local"
