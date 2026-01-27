@@ -220,7 +220,7 @@ openssl req -x509 -nodes -newkey rsa:4096 \
 ```
 
 ##### Production
-For the `nginx-prod` mode, certificates are issued and renewed automatically by certbot. Set `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` in `.env`, make sure your DNS points at the VM, and ensure ports 80/443 are open. On first run, the `certbot-init` service requests the initial certificate, then the `certbot` service renews on a 12-hour loop.
+For the `nginx-prod` mode, certificates are issued and renewed automatically by certbot. No certbot installation is required as docker services pull a certbot image. Simply set `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` in `.env`, make sure your DNS points at the VM, and ensure ports 80/443 are open. On first run, the `certbot-init` service requests the initial certificate, then the `certbot` service renews on a 12-hour loop.
 
 Use a real email you control for `LETSENCRYPT_EMAIL` (it receives expiration and recovery notices); see the Certbot/Let's Encrypt docs for account email guidance. `nginx-prod` reloads on a 12-hour loop (default `NGINX_RELOAD_INTERVAL_SECONDS=43200`) to pick up renewed certificates; override this in `.env` if needed.
 
