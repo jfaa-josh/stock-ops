@@ -31,7 +31,7 @@ fi
 PREFECT_UI_SERVE_BASE="/prefect"
 PYTHONPATH="./src"
 
-TMP_ENV="$(mktemp)"
+TMP_ENV="$(mktemp -p . .env.runtime.XXXXXX)"
 cleanup() { rm -f "$TMP_ENV"; }
 trap cleanup EXIT
 
