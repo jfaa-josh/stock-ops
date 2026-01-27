@@ -55,7 +55,6 @@ pip-selfcheck.json
 # Environment & Secrets
 # =======================
 .env
-.env.*
 .secret
 secrets.*
 credentials.*
