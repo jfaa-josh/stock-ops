@@ -33,6 +33,13 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
   docker compose version
   ```
 
+  If you see `permission denied` on `/var/run/docker.sock`, add your user to the docker group:
+  ```bash
+  sudo groupadd docker
+  sudo usermod -aG docker ubuntu
+  newgrp docker
+  ```
+
 ---
 
 ## Quickstart
