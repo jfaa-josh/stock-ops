@@ -3,7 +3,7 @@ name: stockops
 # Grab .env file for environment variables
 x-common-envfile: &common-envfile
   env_file:
-    - .env
+    - ${ENV_FILE:-.env}
 
 # Anchor for the shared Prefect env vars
 x-common-envvars: &common-envvars
@@ -50,6 +50,59 @@ services:
       timeout: 5s                                     # Timeout per check
       retries: 5                                      # Number of retries before marking unhealthy
 
+  nginx-prod:                                             # Reverse proxy for UI services -> single entrypoint
+    image: nginx:alpine                               # Small, performance-tuned nginx base image
+    container_name: nginx                             # Fixed container name for easier docker ps grepping
+    <<: *common-envfile
+    depends_on:
+      certbot-init:
+        condition: service_completed_successfully
+      init-htpasswd-prod:
+        condition: service_completed_successfully
+      streamlit:
+        condition: service_started                    # Delay nginx until the Streamlit UI is ready
+    ports:
+      - "80:80"                                       # Serve HTTP on host port 80
+      - "443:443"                                     # Serve HTTPS on host port 443
+    profiles: ["nginx-prod"]
+    volumes:
+      - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
+      - ./nginx/conf.d/stockops-prod.conf.template:/etc/nginx/templates/stockops.conf.template:ro
+      - ./certs/live/stockops.prod:/etc/letsencrypt:ro                   # TLS certs (sync with stockops.conf expectations)
+      - ./certs/www:/var/www/certbot:ro
+      - ./nginx/prod:/etc/nginx/prod:ro  # Production htpasswd (created on first run)
+      - ./scripts:/scripts:ro
+    restart: unless-stopped                           # Auto-restart unless explicitly stopped
+    command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec nginx -g 'daemon off;'"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  nginx-local:
+    image: nginx:alpine
+    container_name: nginx-local
+    depends_on:
+      - streamlit
+    ports:
+      - "80:80"
+      - "443:443"
+    profiles: ["nginx-local"]
+    volumes:
+      - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
+      - ./nginx/conf.d/stockops-local.conf:/etc/nginx/conf.d/stockops.conf:ro
+      - ./certs/live/stockops.local:/etc/letsencrypt:ro
+      - ./nginx/htpasswd-local:/etc/nginx/htpasswd:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   ###DATA PIPELINE CORE SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
   writer-service:                                     # Defines the buffer & sqlite writer-service container
     <<: *common-envfile                               # Load common .env file for environment variables
@@ -68,7 +121,7 @@ services:
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
     environment:                                      # Define environment variables for the container
       <<: *common-envvars                             # Inherit common environment variables
-      REDIS_URL: redis://redis:6379/1                 # Redis connex URL (host:port/db) (use DB1; prefect uses DB0)
+      REDIS_URL: redis://redis:6379/1                 # Internal redis connex URL (host:port/db) (use DB1; prefect uses DB0)
       PYTHONDONTWRITEBYTECODE: 1                      # Prevents Python from writing __pycache__ clutter to container
       PYTHONUNBUFFERED: 1                             # Forces stdout/stderr logs to flush -> `docker logs` in real time
       BUFFER_STREAM: buf:ingest                       # Name of the Redis stream used for buffering ingest data
@@ -103,21 +156,20 @@ services:
       # Connection string for Prefect → Postgres:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       PREFECT_SERVER_API_HOST: 0.0.0.0                # Listen on every network interface
-      PREFECT_API_URL: http://prefect-server:4200/api  # Internal API URL for Prefect services
-      PREFECT_UI_API_URL: http://localhost:4200/api   # Browser‐visible UI endpoint http://localhost:4200
+      PREFECT_API_URL: http://prefect-server:4200/api  # Internal API URL for Prefect services (not host-exposed)
+      PREFECT_UI_SERVE_BASE: ${PREFECT_UI_SERVE_BASE:-/prefect}  # Base path for the UI
+      PREFECT_UI_API_URL: ${PREFECT_UI_API_URL:-https://stockops.local/api}  # UI uses proxy URL
       PREFECT_LOGGING_LEVEL: DEBUG                    # Verbose logs for debugging
       PREFECT_MESSAGING_BROKER: prefect_redis.messaging   # Broker config for Prefect messaging
       PREFECT_MESSAGING_CACHE: prefect_redis.messaging    # Cache config for messaging
       PREFECT_REDIS_MESSAGING_HOST: redis             # Redis hostname for messaging
-      PREFECT_REDIS_MESSAGING_PORT: 6379              # Redis port
+      PREFECT_REDIS_MESSAGING_PORT: 6379              # Docker internal Redis port
       PREFECT_REDIS_MESSAGING_DB: 0                   # Redis DB index
     depends_on:
       postgres:
         condition: service_healthy                    # Wait for Postgres to be ready
       redis:
         condition: service_healthy                    # Wait for Redis to be ready
-    ports:
-      - "4200:4200"                                   # Expose the Prefect UI/API port
     healthcheck:                                      # Verify the API comes up successfully
       test: [
         "CMD", "python", "-c",
@@ -175,8 +227,6 @@ services:
         PYTHON_VERSION: ${PYTHON_VERSION}             # Pass Python version to Dockerfile
       dockerfile: docker/Dockerfile.streamlit         # Custom Dockerfile for Streamlit
     image: streamlit                                  # Name of the built Streamlit image
-    ports:
-      - "8501:8501"                                   # Expose Streamlit app port (view at http://localhost:8501/)
     depends_on:
       prefect-serve:
         condition: service_healthy                    # Wait until Prefect server is ready
@@ -208,12 +258,48 @@ services:
     volumes:
       - sqlitebrowser_config:/config                  # Stores the app's own settings/config; persistent across restarts
       - db_data:/data                                 # Mount your named volume with SQLite .db files
-    ports:
-      - "8081:3000"                                   # Expose container port 3000 (HTTP UI) on host port 8081
-                                                      # → open http://localhost:8081 in browser
     security_opt:
       - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies run properly
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
+
+  init-htpasswd-prod:
+    image: httpd:2.4-alpine
+    profiles: ["nginx-prod"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./nginx/prod:/etc/nginx-prod:rw
+      - ./scripts:/scripts:ro
+    command: ["/bin/sh", "-c", "/bin/sh /scripts/init-htpasswd-prod.sh /etc/nginx-prod/htpasswd"]
+    restart: "no"
+
+  certbot-init:
+    image: certbot/certbot:latest
+    profiles: ["nginx-prod"]
+    <<: *common-envfile
+    ports:
+      - "80:80"
+    volumes:
+      - ./certs/live/stockops.prod:/etc/letsencrypt:rw
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: "/scripts/certbot-init.sh"
+    restart: "no"
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["nginx-prod"]
+    depends_on:
+      nginx-prod:
+        condition: service_started
+    <<: *common-envfile
+    volumes:
+      - ./certs/live/stockops.prod:/etc/letsencrypt:rw
+      - ./certs/www:/var/www/certbot:rw
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: "/scripts/certbot-renew.sh"
+    restart: unless-stopped
 
 volumes:                                              # Named Docker volumes for data persistence
   postgres_data:                                      # Holds Postgres data directory

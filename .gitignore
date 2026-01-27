@@ -55,10 +55,21 @@ pip-selfcheck.json
 # Environment & Secrets
 # =======================
 .env
-.env.*
 .secret
 secrets.*
 credentials.*
+nginx/prod/htpasswd
+.env.runtime.*
+
+# ======================
+# TLS certs generated locally
+# ======================
+certs/live/**/*.pem
+certs/live/**/*.key
+!certs/live/stockops.local/
+!certs/live/stockops.local/*
+certs/www/**
+!certs/www/.gitkeep
 
 # ======================
 # Jupyter & IPython

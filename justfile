@@ -33,8 +33,5 @@ clean-data:
 
 # Generate a Dockerfile for the project
 docker-build:
-  chmod +x scripts/derive_env_from_pyproject.py
-  ./scripts/derive_env_from_pyproject.py
-  test -f .env || (echo ".env not found after derive_env_from_pyproject.py" && exit 1)
+  export $(bash scripts/export_build_versions.sh)
   docker compose build
-  if [ "${CI:-}" = "true" ]; then rm .env; fi

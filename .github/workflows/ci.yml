@@ -3,9 +3,7 @@ name: CI
 'on':
   pull_request:
     branches: [main]
-  push:
-    branches-ignore: [main]
-    tags-ignore: ['v*']
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -62,5 +60,8 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v3
 
-      - name: Generate .env from .python-version
+      - name: Export build versions
+        run: bash scripts/export_build_versions.sh --github-env >> "$GITHUB_ENV"
+
+      - name: Build images
         run: just docker-build
