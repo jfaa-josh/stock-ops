@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/jfaa-josh/stock-ops/compare/v0.11.0...v0.12.0) (2026-01-27)
+
+
+### Features
+
+* **nginx:** add secure public and local deployment ([#37](https://github.com/jfaa-josh/stock-ops/issues/37)) ([2d9e6d2](https://github.com/jfaa-josh/stock-ops/commit/2d9e6d255e53045f90b352b8c454d3f3dfc8a31c))
+
 ## [0.11.0](https://github.com/jfaa-josh/stock-ops/compare/v0.10.0...v0.11.0) (2025-09-23)
 
 
