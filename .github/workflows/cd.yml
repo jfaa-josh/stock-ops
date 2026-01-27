@@ -32,10 +32,10 @@ jobs:                                         # Top-level collection of jobs
       - name: Derive metadata
         id: meta
         run: |                                  # Write "version" to GITHUB_OUTPUT for use as steps.meta.outputs.version
-            echo "version=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          echo "version=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare .env for build (PYTHON_VERSION / PREFECT_VERSION)
-        run: python scripts/derive_env_from_pyproject.py
+      - name: Export build versions (PYTHON_VERSION / PREFECT_VERSION)
+        run: bash scripts/export_build_versions.sh --github-env >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3            # Docker login action

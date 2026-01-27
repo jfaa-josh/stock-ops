@@ -33,5 +33,5 @@ clean-data:
 
 # Generate a Dockerfile for the project
 docker-build:
-  test -f .env || (echo ".env not found; copy .env.example to .env and update placeholders" && exit 1)
+  export $(bash scripts/export_build_versions.sh)
   docker compose build
