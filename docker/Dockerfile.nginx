@@ -1,0 +1,16 @@
+FROM nginx:alpine
+
+RUN mkdir -p /etc/nginx/templates-empty /etc/nginx/templates-prod /etc/letsencrypt
+
+# Base + local config baked in; prod uses envsubst from templates-prod
+COPY nginx/conf.d/stockops-base.conf /etc/nginx/conf.d/stockops-base.conf
+COPY nginx/conf.d/stockops-local.conf /etc/nginx/conf.d/stockops.conf
+COPY nginx/conf.d/stockops-prod.conf.template /etc/nginx/templates-prod/stockops.conf.template
+
+# Local (non-sensitive) certs baked in
+COPY certs/live/stockops.local/fullchain.pem /etc/letsencrypt/fullchain.pem
+COPY certs/live/stockops.local/privkey.pem /etc/letsencrypt/privkey.pem
+
+# Utility script(s)
+COPY scripts/nginx-reload-loop.sh /scripts/nginx-reload-loop.sh
+RUN chmod +x /scripts/nginx-reload-loop.sh

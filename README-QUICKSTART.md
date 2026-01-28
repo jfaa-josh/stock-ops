@@ -43,17 +43,21 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
 ---
 
 ## Quickstart
-Use the wrapper script to start the stack. It sets the correct nginx mode and Prefect UI URL based on `local` or `prod`, and passes through any extra compose flags.
+Use `stockops.sh` to start the stack. It sets the correct nginx mode and Prefect UI URL based on `local` or `prod`, and passes through docker compose flags.
 1) Create an empty folder for deployment
-2) Download `docker-compose.vx.y.z.yml` from GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
-3) Copy `.env.example` to `.env` and update placeholders ([see instructions](#2-configure-environment))
-4) If using `prod`, set `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` ([see instructions](#tls-certificates))
-5) Launch full datapipeline stack in detached mode:
+2) Download `docker-compose.vx.y.z.yml`, `stockops.sh`, and `.env.example` from the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
+3) Make the script executable:
    ```bash
-   ./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   chmod +x stockops.sh
+   ```
+4) Rename `.env.example` to `.env` and update placeholders ([see instructions](#2-configure-environment))
+5) If using `prod`, set `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` ([see instructions](#tls-certificates))
+6) Launch full datapipeline stack in detached mode:
+   ```bash
+   ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
    ```
 (Use `local` instead of `prod` to start the local nginx mode and self-signed `stockops.local` certs.)
-6) Access the UI:
+7) Access the UI:
    - Local: `https://stockops.local/`
    - Production: `https://your.production.domain/`
 
@@ -62,19 +66,19 @@ Use the wrapper script to start the stack. It sets the correct nginx mode and Pr
 ## Execution Details
 
 ### 1. Download a Pinned Compose File
-From the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page, grab the compose file for the desired version.
+From the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page, grab the compose file for the desired version, plus the wrapper and env example.
 
-Example: `docker-compose.v1.2.3.yml`
+Example assets:
+- `docker-compose.v1.2.3.yml`
+- `stockops.sh`
+- `.env.example`
 
-These files reference immutable image tags—no local build required.
+Place all three in the same directory. These files reference immutable image tags—no local build required.
 
 ### 2. Configure Environment
-Copy `.env.example` to `.env` in the same directory as the compose file, then update the placeholder values:
-```bash
-cp .env.example .env
-```
+Rename `.env.example` to `.env` in the same directory as the compose file, then update the placeholder values:
 
-`PRODUCTION_DOMAIN` is used by the `nginx-prod` mode to generate the `server_name` and certificate paths inside `nginx/conf.d/stockops-prod.conf.template`, and certbot uses it to request and renew certificates under `./certs/live/stockops.prod/live/$PRODUCTION_DOMAIN/`.
+`PRODUCTION_DOMAIN` is used by the `nginx-prod` mode to generate the `server_name` and certificate paths inside the baked prod nginx template, and certbot uses it to request and renew certificates under `/etc/letsencrypt/live/$PRODUCTION_DOMAIN` inside the production cert volume.
 `LETSENCRYPT_EMAIL` is required for certbot to issue the initial production certificate. Local mode can keep placeholder values.
 The wrapper sets `PREFECT_UI_SERVE_BASE`, `PREFECT_UI_API_URL`, and `PYTHONPATH` automatically.
 
@@ -90,7 +94,7 @@ StockOps is currently capable of interacting with the following providers:
 To start the core data-pipeline profile only in detached mode:
 
 ```bash
-./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core up -d
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core up -d
 ```
 
 Important container launches (nginx now reverse-proxies the UI services on ports 80/443):
@@ -110,7 +114,7 @@ Important container launches (nginx now reverse-proxies the UI services on ports
 Start the main + visualization data-pipeline profile in detached mode:
 
 ```bash
-./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
 ```
 
 Additional container launches:
@@ -131,29 +135,29 @@ Running with project name `-p datapipe` is optional. The benefit, shown here, is
 
 #### Check status:
 ```bash
-./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml ps
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml ps
 ```
 
 #### View logs (example: writer-service container):
 ```bash
-./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml logs -f writer-service
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml logs -f writer-service
 ```
 
 #### Stop / Restart / Remove:
 
 *Stop (keep containers/data):*
 ```bash
-./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml stop
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml stop
 ```
 
 *Restart:*
 ```bash
-./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml restart
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml restart
 ```
 
 *Remove containers (preserve data):*
 ```bash
-./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml down
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml down
 ```
 
 Note: On all `down` calls, do not postpend -v unless you intend to delete all storage volumes.
@@ -176,14 +180,14 @@ To copy database files to a local directory:
 1) cd to desired local directory (example: localdir)
 2) Copy files to localdir/data:
   ```bash
-  docker cp "$(./run/stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml ps -q writer-service)":/app/data/raw ./data
+  docker cp "$(./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml ps -q writer-service)":/app/data/raw ./data
   ```
 
 Note: Container must be running.
 
 ### Routing UI traffic through nginx
 
-Responsibility for TLS is handled by the wrapper mode: `prod` renders `nginx/conf.d/stockops-prod.conf.template` using `PRODUCTION_DOMAIN`, while `local` loads `nginx/conf.d/stockops-local.conf` (which already targets `stockops.local` and the local self-signed certs under `./certs/live/stockops.local`). Only the nginx container for the selected mode starts, so there is no port conflict.
+Responsibility for TLS is handled by the wrapper mode: `prod` renders the baked prod nginx template using `PRODUCTION_DOMAIN`, while `local` loads the baked local config (which already targets `stockops.local` and the bundled self-signed certs). Only the nginx container for the selected mode starts, so there is no port conflict.
 
 The active nginx service listens only on host ports 80/443 and proxies:
 
@@ -193,20 +197,39 @@ A dedicated listener on port 80 immediately issues `301 https://$host$request_ur
 - `/prefect/` → Prefect server API/UI
 - `/sqlite/` → SQLite Browser (only available when `datapipe-visualize-data` is active)
 
-The nginx mode is the only way to reach services from outside the Docker network; services remain internal by default. The nginx container mounts a local auth file for `nginx-local` and a separate production auth file for `nginx-prod`.
+The nginx mode is the only way to reach services from outside the Docker network; services remain internal by default. `nginx-local` uses a bundled htpasswd, and `nginx-prod` uses a persistent htpasswd stored in a named volume.
 
 #### Basic authorization
 
-We commit `./nginx/htpasswd-local` prepopulated with the `localadmin` user for the `nginx-local` mode. Change the password with `htpasswd -B nginx/htpasswd-local localadmin` or create additional users with `htpasswd -B nginx/htpasswd-local <new user>`.
+Local mode ships with a bundled `localadmin` user. It is seeded into a named volume on first start, so changes persist across container recreation. To update it:
+```bash
+./stockops.sh local -p datapipe -f docker-compose.vx.y.z.yml exec nginx-local \
+  htpasswd -B /etc/nginx-local/htpasswd localadmin
+```
+For production, `nginx-prod` uses a persistent htpasswd stored in the `nginx_prod_auth` named volume. The first time you start `nginx-prod`, an init container runs and prompts you for a password, creating the `produser` account. Run the initial startup without `-d` so the prompt can appear. To rotate credentials later:
+```bash
+# Remove the existing htpasswd file from the volume
+docker run --rm -v datapipe_nginx_prod_auth:/data alpine sh -c "rm -f /data/htpasswd"
 
-For production, `nginx-prod` uses `./nginx/prod/htpasswd` (gitignored). The first time you start `nginx-prod`, an init container runs `scripts/init-htpasswd-prod.sh`, prompts you for a password, and creates the file for the `produser` account. Run the initial startup without `-d` so the prompt can appear. To rotate credentials later, delete `./nginx/prod/htpasswd` and restart `nginx-prod` without `-d` to re-prompt.
+# Re-run the init container to set a new password
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml run --rm init-htpasswd-prod
+```
+
+To reset local auth to the default `localadmin` user:
+```bash
+# Remove the existing htpasswd file from the local volume
+docker run --rm -v datapipe_nginx_local_auth:/data alpine sh -c "rm -f /data/htpasswd"
+
+# Re-seed from the baked default
+./stockops.sh local -p datapipe -f docker-compose.vx.y.z.yml run --rm init-htpasswd-local
+```
 
 #### TLS certificates
 
-TLS files are stored under `./certs/live/stockops.prod/live/$PRODUCTION_DOMAIN` for production and are mounted straight into nginx. The `nginx-prod` mode renders `nginx/conf.d/stockops-prod.conf.template` using `PRODUCTION_DOMAIN`.
+TLS files are stored in the `certs_prod` named volume for production and are mounted straight into nginx at `/etc/letsencrypt`. The `nginx-prod` mode renders the baked prod template using `PRODUCTION_DOMAIN`.
 
 ##### Local
-The `nginx-local` mode loads `nginx/conf.d/stockops-local.conf`, which already targets `stockops.local` and the self-signed files under `./certs/live/stockops.local`. That local pair is committed so the repo contains a 100-year placeholder cert you can use without re-generating. If desired, no modifications are required for local deployment.
+The `nginx-local` mode loads the baked local config, which already targets `stockops.local` and uses bundled self-signed certs. If desired, no modifications are required for local deployment.
 
 The provided local pair has no CA; in order to avoid browser rejecting the certificate pair as untrustworthy, import into whatever trust store your OS/browser relies on. Example for WSL/Linux:
 ```bash
@@ -215,9 +238,15 @@ sudo cp ./certs/live/stockops.local/fullchain.pem /usr/local/share/ca-certificat
 cd ~ && sudo update-ca-certificates
 ```
 
-After adding the certificates to your trust store, you must then resolve stockops.local to 127.0.0.1.
+After adding the certificate to your trust store, you must then resolve stockops.local to 127.0.0.1.
 
-If you ever need to rebuild the local certificate (for example to change the subject), rerun the long-lived self-signed command:
+If you want to trust the bundled cert, you can extract it from the image:
+```bash
+./stockops.sh local -p datapipe -f docker-compose.vx.y.z.yml run --rm nginx-local \
+  cat /etc/letsencrypt/fullchain.pem > stockops.local.crt
+```
+
+If you ever need to rebuild the local certificate (for example to change the subject), you will need a custom nginx image built from source with your new certs.
 
 ```bash
 openssl req -x509 -nodes -newkey rsa:4096 \
@@ -237,6 +266,6 @@ Use a real email you control for `LETSENCRYPT_EMAIL` (it receives expiration and
    - Reuse your existing .env (only update if release notes add variables).
 2. For minimal interruption of service that is currently running:
   ```bash
-  ./run/stockops.sh prod -p datapipe -f docker-compose.v1.3.0.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+  ./stockops.sh prod -p datapipe -f docker-compose.v1.3.0.yml --profile datapipe-core --profile datapipe-visualize-data up -d
    ```
    - Docker compares the images deployed in the current run to those in the new compose version, updates as needed, and restarts any updated containers.  All named volumes—and therefore your data—are preserved.

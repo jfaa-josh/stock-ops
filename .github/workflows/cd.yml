@@ -50,7 +50,7 @@ jobs:                                         # Top-level collection of jobs
           sudo chmod +x /usr/local/bin/yq
 
       # Determine which services are custom builds, and reuse this determination to avoid redundancy
-      - name: Resolve buildable services
+      - name: Resolve buildable services and images
         id: svc
         shell: bash
         run: |
@@ -59,7 +59,13 @@ jobs:                                         # Top-level collection of jobs
                       | to_entries
                       | map(select(.value.build) | .key)
                       | join(" ")' docker-compose.yml)
+          imgs=$(yq -r '.services
+                      | to_entries
+                      | map(select(.value.build) | (.value.image // .key))
+                      | unique
+                      | join(" ")' docker-compose.yml)
           echo "list=$svcs" >> "$GITHUB_OUTPUT"
+          echo "images=$imgs" >> "$GITHUB_OUTPUT"
 
       # Build only services that have `build:` to avoid postgres/redis, etc.
       - name: Build app images (compose)
@@ -74,32 +80,31 @@ jobs:                                         # Top-level collection of jobs
       # Tag and push each custom service image: ghcr.io/owner/repo-<service>:<version> and :latest
       # Logic to ensure correct image names are sourced to avoid nulls
       - name: Tag & push app images
-        if: ${{ steps.svc.outputs.list != '' }}
+        if: ${{ steps.svc.outputs.images != '' }}
         shell: bash
         env:                                  # Job-wide environment variables
           NS: ${{ steps.ns.outputs.ns }}      # Base image namespace, e.g. ghcr.io/owner/repo
           VERSION: ${{ steps.meta.outputs.version }}  # Use output version generated above
         run: |                                # Shell script to tag/push each service image
           set -euo pipefail                   # Exit on error/undefined vars/pipe fails
-          for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list of custom build services from above
-            id="$(docker image ls --format '{{.Repository}}:{{.Tag}}' \
-                  --filter "label=com.docker.compose.service=${svc}" \
-                  | awk '$0 !~ /:<none>$/ {print; exit}' || true)"
-
-            if [ -z "${id}" ]; then
-              if docker image inspect "${svc}:latest" >/dev/null 2>&1; then
-                id="${svc}:latest"
-              else
-                echo "No built image found for service: $svc" >&2
-                exit 1
-              fi
+          for img in ${{ steps.svc.outputs.images }}; do  # Reusing unique image list from above
+            if docker image inspect "${img}:latest" >/dev/null 2>&1; then
+              id="${img}:latest"
+            else
+              id="$(docker image ls --format '{{.Repository}}:{{.Tag}}' \
+                    | awk -F: -v img="$img" '$1==img {print; exit}' || true)"
             fi
 
-            echo "FOUND $svc -> $id"
-            docker tag "$id" "${NS}-${svc}:${VERSION}"  # Versioned tag
-            docker tag "$id" "${NS}-${svc}:latest"      # 'latest' tag
-            docker push "${NS}-${svc}:${VERSION}"       # Push versioned image
-            docker push "${NS}-${svc}:latest"           # Push latest image
+            if [ -z "${id}" ]; then
+              echo "No built image found for image: $img" >&2
+              exit 1
+            fi
+
+            echo "FOUND $img -> $id"
+            docker tag "$id" "${NS}-${img}:${VERSION}"  # Versioned tag
+            docker tag "$id" "${NS}-${img}:latest"      # 'latest' tag
+            docker push "${NS}-${img}:${VERSION}"       # Push versioned image
+            docker push "${NS}-${img}:latest"           # Push latest image
           done
 
       # Produce a pinned, pull-only compose file for deployment:
@@ -118,7 +123,7 @@ jobs:                                         # Top-level collection of jobs
               (. as $e
                | (
                    select(.value | has("build"))
-                   | .value.image = (strenv(NS) + "-" + .key + ":" + strenv(VERSION))
+                   | .value.image = (strenv(NS) + "-" + (.value.image // .key) + ":" + strenv(VERSION))
                    | del(.value.build)
                  ) // $e
               )
@@ -134,6 +139,8 @@ jobs:                                         # Top-level collection of jobs
           tag_name: ${{ steps.meta.outputs.version }}   # Attach to the current version
           files: |                # Upload the pinned compose file, readme, and license to release
             docker-compose.${{ steps.meta.outputs.version }}.yml
+            .env.example
             README-QUICKSTART.md
             LICENSE.md
+            run/stockops.sh
           body_path: README-QUICKSTART.md        # makes the release description this README
