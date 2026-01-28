@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/jfaa-josh/stock-ops/compare/v0.12.0...v0.12.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* **nginx:** containerized nginx, certs, and htpass services using custom images for push to GHCR. Modified releases to include stockops.sh entrypoint and .env.example. Modified readme instructions. ([#39](https://github.com/jfaa-josh/stock-ops/issues/39)) ([8907e09](https://github.com/jfaa-josh/stock-ops/commit/8907e0995bf81d73bce80b7436e3896a679491db))
+
 ## [0.12.0](https://github.com/jfaa-josh/stock-ops/compare/v0.11.0...v0.12.0) (2026-01-27)
 
 
