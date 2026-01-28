@@ -51,7 +51,10 @@ services:
       retries: 5                                      # Number of retries before marking unhealthy
 
   nginx-prod:                                             # Reverse proxy for UI services -> single entrypoint
-    image: nginx:alpine                               # Small, performance-tuned nginx base image
+    image: stockops-nginx                              # Custom nginx image with baked configs/certs
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nginx
     container_name: nginx                             # Fixed container name for easier docker ps grepping
     <<: *common-envfile
     depends_on:
@@ -65,13 +68,12 @@ services:
       - "80:80"                                       # Serve HTTP on host port 80
       - "443:443"                                     # Serve HTTPS on host port 443
     profiles: ["nginx-prod"]
+    environment:
+      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-prod
     volumes:
-      - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
-      - ./nginx/conf.d/stockops-prod.conf.template:/etc/nginx/templates/stockops.conf.template:ro
-      - ./certs/live/stockops.prod:/etc/letsencrypt:ro                   # TLS certs (sync with stockops.conf expectations)
-      - ./certs/www:/var/www/certbot:ro
-      - ./nginx/prod:/etc/nginx/prod:ro  # Production htpasswd (created on first run)
-      - ./scripts:/scripts:ro
+      - certs_prod:/etc/letsencrypt:ro                   # TLS certs persisted in named volume
+      - certs_www:/var/www/certbot:ro
+      - nginx_prod_auth:/etc/nginx/prod:ro               # Production htpasswd (created on first run)
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
     command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec nginx -g 'daemon off;'"]
     healthcheck:
@@ -82,19 +84,24 @@ services:
       start_period: 10s
 
   nginx-local:
-    image: nginx:alpine
+    image: stockops-nginx
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nginx
     container_name: nginx-local
     depends_on:
-      - streamlit
+      init-htpasswd-local:
+        condition: service_completed_successfully
+      streamlit:
+        condition: service_started
     ports:
       - "80:80"
       - "443:443"
     profiles: ["nginx-local"]
+    environment:
+      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-empty
     volumes:
-      - ./nginx/conf.d/stockops-base.conf:/etc/nginx/conf.d/stockops-base.conf:ro
-      - ./nginx/conf.d/stockops-local.conf:/etc/nginx/conf.d/stockops.conf:ro
-      - ./certs/live/stockops.local:/etc/letsencrypt:ro
-      - ./nginx/htpasswd-local:/etc/nginx/htpasswd:ro
+      - nginx_local_auth:/etc/nginx-local:rw
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
@@ -263,40 +270,57 @@ services:
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
 
   init-htpasswd-prod:
-    image: httpd:2.4-alpine
+    image: stockops-htpasswd
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.htpasswd
     profiles: ["nginx-prod"]
     stdin_open: true
     tty: true
     volumes:
-      - ./nginx/prod:/etc/nginx-prod:rw
-      - ./scripts:/scripts:ro
+      - nginx_prod_auth:/etc/nginx-prod:rw
     command: ["/bin/sh", "-c", "/bin/sh /scripts/init-htpasswd-prod.sh /etc/nginx-prod/htpasswd"]
     restart: "no"
 
+  init-htpasswd-local:
+    image: stockops-htpasswd
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.htpasswd
+    profiles: ["nginx-local"]
+    volumes:
+      - nginx_local_auth:/etc/nginx-local:rw
+    command: ["/bin/sh", "-c", "/bin/sh /scripts/init-htpasswd-local.sh /etc/nginx-local"]
+    restart: "no"
+
   certbot-init:
-    image: certbot/certbot:latest
+    image: stockops-certbot
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.certbot
     profiles: ["nginx-prod"]
     <<: *common-envfile
     ports:
       - "80:80"
     volumes:
-      - ./certs/live/stockops.prod:/etc/letsencrypt:rw
-      - ./scripts:/scripts:ro
+      - certs_prod:/etc/letsencrypt:rw
     entrypoint: ["/bin/sh", "-c"]
     command: "/scripts/certbot-init.sh"
     restart: "no"
 
   certbot:
-    image: certbot/certbot:latest
+    image: stockops-certbot
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.certbot
     profiles: ["nginx-prod"]
     depends_on:
       nginx-prod:
         condition: service_started
     <<: *common-envfile
     volumes:
-      - ./certs/live/stockops.prod:/etc/letsencrypt:rw
-      - ./certs/www:/var/www/certbot:rw
-      - ./scripts:/scripts:ro
+      - certs_prod:/etc/letsencrypt:rw
+      - certs_www:/var/www/certbot:rw
     entrypoint: ["/bin/sh", "-c"]
     command: "/scripts/certbot-renew.sh"
     restart: unless-stopped
@@ -306,3 +330,7 @@ volumes:                                              # Named Docker volumes for
   redis_data:                                         # Holds Redis data directory
   db_data:                                            # Holds .db database directory
   sqlitebrowser_config:                               # Holds config data for sqlitebrowser settings
+  certs_prod:                                        # Persisted production certs
+  certs_www:                                         # Webroot for certbot renewals
+  nginx_prod_auth:                                   # Production htpasswd storage
+  nginx_local_auth:                                  # Local htpasswd storage

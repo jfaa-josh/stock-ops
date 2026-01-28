@@ -1,0 +1,5 @@
+FROM certbot/certbot:latest
+
+COPY scripts/certbot-init.sh /scripts/certbot-init.sh
+COPY scripts/certbot-renew.sh /scripts/certbot-renew.sh
+RUN chmod +x /scripts/*.sh
