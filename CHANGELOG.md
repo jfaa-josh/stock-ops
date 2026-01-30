@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/jfaa-josh/stock-ops/compare/v0.12.1...v0.12.2) (2026-01-30)
+
+
+### Bug Fixes
+
+* **cd:** Added profiles to docker compose build call for services in cd.yml that need to be released so that docker has access. ([#41](https://github.com/jfaa-josh/stock-ops/issues/41)) ([5ffd4ec](https://github.com/jfaa-josh/stock-ops/commit/5ffd4ec2cf61059310b84d617deddf8517c1d0ee))
+
 ## [0.12.1](https://github.com/jfaa-josh/stock-ops/compare/v0.12.0...v0.12.1) (2026-01-28)
 
 
