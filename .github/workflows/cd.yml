@@ -73,6 +73,7 @@ jobs:                                         # Top-level collection of jobs
         shell: bash
         run: |                                # Build all local services described in docker-compose.yml
           set -euo pipefail
+          export COMPOSE_PROFILES="datapipe-core,datapipe-visualize-data,nginx-local,nginx-prod"
           for svc in ${{ steps.svc.outputs.list }}; do  # Reusing list from above
             docker compose build --pull "$svc"
           done
