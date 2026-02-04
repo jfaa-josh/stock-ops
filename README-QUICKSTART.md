@@ -58,6 +58,7 @@ See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-
    mkdir -p secrets
    htpasswd -Bc ./secrets/prod.htpasswd produser
    ```
+   Note: always start with `stockops.sh` (not raw `docker compose`) so preflight checks can catch missing/invalid auth file paths before containers start.
 7) Launch full production datapipeline stack in detached mode:
    ```bash
    ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
