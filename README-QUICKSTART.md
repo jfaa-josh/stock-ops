@@ -10,9 +10,9 @@ It pulls pre-built, pinned images released to **GitHub Container Registry (GHCR)
 StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel concurrent realtime and historical data provider API call deployments.  Deployments are specified using a Streamlit user interface, and can be triggered immediately or scheduled.  Data extracted by concurrent streams is buffered, and then extracted by a single SQLite writer which transforms and stores the data in a docker volume database within `.db` files.
 
 ### Execution Summary
-- User creates `.env` from `.env.example` and fills in provider keys
+- User creates `.env` from `.env.example` (or `default.env.example`) and fills in provider keys, and production domain and letsencrypt email (if deploying to production)
 - User sets `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` for automated TLS
-- Available providers set to Streamlit UI
+- Launch with `stockops.sh`, and set available provider in Streamlit UI
 - Streamlit UI sets historical or streaming data paradigms called "deployments"
 - Prefect flow runs (executions of deployments) are either triggered (live) or scheduled by user via Streamlit UI
 - Prefect orchestrates concurrent flow run executions
@@ -44,20 +44,26 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
 
 ## Quickstart
 Use `stockops.sh` to start the stack. It sets the correct nginx mode and Prefect UI URL based on `local` or `prod`, and passes through docker compose flags.
+See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-cli-deployment) for an example production deployment ssh call seqeunce.
 1) Create an empty folder for deployment
-2) Download `docker-compose.vx.y.z.yml`, `stockops.sh`, and `.env.example` from the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
+2) Download `docker-compose.vx.y.z.yml`, `stockops.sh`, and `.env.example` (or `default.env.example`) from the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
 3) Make the script executable:
    ```bash
    chmod +x stockops.sh
    ```
-4) Rename `.env.example` to `.env` and update placeholders ([see instructions](#2-configure-environment))
+4) Rename `.env.example` (or `default.env.example`) to `.env` and update placeholders ([see instructions](#2-configure-environment))
 5) If using `prod`, set `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` ([see instructions](#tls-certificates))
-6) Launch full datapipeline stack in detached mode:
+6) If using `prod`, create the nginx basic-auth file:
+   ```bash
+   mkdir -p secrets
+   htpasswd -Bc ./secrets/prod.htpasswd produser
+   ```
+7) Launch full production datapipeline stack in detached mode:
    ```bash
    ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
    ```
-(Use `local` instead of `prod` to start the local nginx mode and self-signed `stockops.local` certs.)
-7) Access the UI:
+   (Use `local` instead of `prod` to start the local nginx mode and self-signed `stockops.local` certs.)
+8) Access the UI:
    - Local: `https://stockops.local/`
    - Production: `https://your.production.domain/`
 
@@ -71,12 +77,12 @@ From the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/rel
 Example assets:
 - `docker-compose.v1.2.3.yml`
 - `stockops.sh`
-- `.env.example`
+- `.env.example` (or `default.env.example`)
 
 Place all three in the same directory. These files reference immutable image tags—no local build required.
 
 ### 2. Configure Environment
-Rename `.env.example` to `.env` in the same directory as the compose file, then update the placeholder values:
+Rename `.env.example` (or `default.env.example`) to `.env` in the same directory as the compose file, then update the placeholder values:
 
 `PRODUCTION_DOMAIN` is used by the `nginx-prod` mode to generate the `server_name` and certificate paths inside the baked prod nginx template, and certbot uses it to request and renew certificates under `/etc/letsencrypt/live/$PRODUCTION_DOMAIN` inside the production cert volume.
 `LETSENCRYPT_EMAIL` is required for certbot to issue the initial production certificate. Local mode can keep placeholder values.
@@ -197,7 +203,7 @@ A dedicated listener on port 80 immediately issues `301 https://$host$request_ur
 - `/prefect/` → Prefect server API/UI
 - `/sqlite/` → SQLite Browser (only available when `datapipe-visualize-data` is active)
 
-The nginx mode is the only way to reach services from outside the Docker network; services remain internal by default. `nginx-local` uses a bundled htpasswd, and `nginx-prod` uses a persistent htpasswd stored in a named volume.
+The nginx mode is the only way to reach services from outside the Docker network; services remain internal by default. `nginx-local` uses a bundled htpasswd, and `nginx-prod` uses a host-managed htpasswd file at `./secrets/prod.htpasswd`.
 
 #### Basic authorization
 
@@ -206,13 +212,11 @@ Local mode ships with a bundled `localadmin` user. It is seeded into a named vol
 ./stockops.sh local -p datapipe -f docker-compose.vx.y.z.yml exec nginx-local \
   htpasswd -B /etc/nginx-local/htpasswd localadmin
 ```
-For production, `nginx-prod` uses a persistent htpasswd stored in the `nginx_prod_auth` named volume. The first time you start `nginx-prod`, an init container runs and prompts you for a password, creating the `produser` account. Run the initial startup without `-d` so the prompt can appear. To rotate credentials later:
+For production, `nginx-prod` reads `./secrets/prod.htpasswd` from the host. Create this file before the first `prod` startup (the wrapper checks and fails fast if it is missing), and run the same command again any time you want to rotate credentials:
 ```bash
-# Remove the existing htpasswd file from the volume
-docker run --rm -v datapipe_nginx_prod_auth:/data alpine sh -c "rm -f /data/htpasswd"
-
-# Re-run the init container to set a new password
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml run --rm init-htpasswd-prod
+# Create or overwrite production credentials used by nginx-prod
+mkdir -p secrets
+htpasswd -Bc ./secrets/prod.htpasswd produser
 ```
 
 To reset local auth to the default `localadmin` user:
@@ -269,3 +273,76 @@ Use a real email you control for `LETSENCRYPT_EMAIL` (it receives expiration and
   ./stockops.sh prod -p datapipe -f docker-compose.v1.3.0.yml --profile datapipe-core --profile datapipe-visualize-data up -d
    ```
    - Docker compares the images deployed in the current run to those in the new compose version, updates as needed, and restarts any updated containers.  All named volumes—and therefore your data—are preserved.
+
+---
+
+## Appendix: Example GitHub CLI deployment using AWS Lightsail Ubuntu
+
+This appendix shows an example production ssh sequence to fetch release assets and launch.
+
+### 1) Create deployment directory
+
+```bash
+mkdir -p ~/stock-ops
+cd ~/stock-ops
+```
+
+### 2) Install GitHub CLI if needed (`gh`)
+
+```bash
+set -euo pipefail
+
+sudo apt-get update -y
+sudo apt-get install -y curl ca-certificates gnupg
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+
+sudo apt-get update -y
+sudo apt-get install -y gh
+gh --version
+```
+
+### 3) Set release/tag and asset names
+
+```bash
+export TAG="vx.y.z"
+export OWNER="jfaa-josh"
+export REPO="stock-ops"
+
+export COMPOSE_ASSET="docker-compose.${TAG}.yml"
+export ENV_ASSET="default.env.example"
+export RUN_ASSET="stockops.sh"
+```
+
+### 4) Authenticate and download release files
+
+```bash
+gh auth login -h github.com -p https -w
+gh release download "$TAG" -R "$OWNER/$REPO" -p "$COMPOSE_ASSET" -p "$ENV_ASSET" -p "$RUN_ASSET"
+ls -la
+```
+
+### 5) Create and edit `.env`
+
+```bash
+mv "$ENV_ASSET" .env
+nano .env
+```
+
+Fill in at least your provider keys and production values `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL`.
+
+### 6) Create production basic-auth credentials
+
+```bash
+mkdir -p secrets
+htpasswd -Bc ./secrets/prod.htpasswd produser
+```
+
+### 7) Launch (prod core profile)
+
+```bash
+chmod +x "$RUN_ASSET"
+./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core up -d
+```
+
+If your VM has limited resources, starting with `datapipe-core` only (without `datapipe-visualize-data`) is recommended.
