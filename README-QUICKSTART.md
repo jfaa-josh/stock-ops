@@ -287,7 +287,7 @@ mkdir -p ~/stock-ops
 cd ~/stock-ops
 ```
 
-### 2) Install GitHub CLI if needed (`gh`)
+### 2) Installs as needed
 
 ```bash
 set -euo pipefail
@@ -297,9 +297,10 @@ sudo apt-get install -y curl ca-certificates gnupg
 
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
 
-sudo apt-get update -y
 sudo apt-get install -y gh
 gh --version
+
+sudo apt-get install -y apache2-utils
 ```
 
 ### 3) Set release/tag and asset names

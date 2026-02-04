@@ -50,7 +50,8 @@ server {
   }
 
   location /sqlite/ {
-    proxy_pass http://sqlite_backend/;
+    set $sqlite_backend "sqlitebrowser:3000";
+    proxy_pass http://$sqlite_backend/;
   }
 
   location / {
