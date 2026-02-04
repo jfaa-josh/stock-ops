@@ -60,8 +60,6 @@ services:
     depends_on:
       certbot-init:
         condition: service_completed_successfully
-      init-htpasswd-prod:
-        condition: service_completed_successfully
       streamlit:
         condition: service_started                    # Delay nginx until the Streamlit UI is ready
     ports:
@@ -73,7 +71,7 @@ services:
     volumes:
       - certs_prod:/etc/letsencrypt:ro                   # TLS certs persisted in named volume
       - certs_www:/var/www/certbot:ro
-      - nginx_prod_auth:/etc/nginx/prod:ro               # Production htpasswd (created on first run)
+      - ./secrets/prod.htpasswd:/etc/nginx/prod/htpasswd:ro  # Production htpasswd file (host-managed)
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
     command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec nginx -g 'daemon off;'"]
     healthcheck:
@@ -269,19 +267,6 @@ services:
       - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies run properly
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
 
-  init-htpasswd-prod:
-    image: stockops-htpasswd
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.htpasswd
-    profiles: ["nginx-prod"]
-    stdin_open: true
-    tty: true
-    volumes:
-      - nginx_prod_auth:/etc/nginx-prod:rw
-    command: ["/bin/sh", "-c", "/bin/sh /scripts/init-htpasswd-prod.sh /etc/nginx-prod/htpasswd"]
-    restart: "no"
-
   init-htpasswd-local:
     image: stockops-htpasswd
     build:
@@ -332,5 +317,4 @@ volumes:                                              # Named Docker volumes for
   sqlitebrowser_config:                               # Holds config data for sqlitebrowser settings
   certs_prod:                                        # Persisted production certs
   certs_www:                                         # Webroot for certbot renewals
-  nginx_prod_auth:                                   # Production htpasswd storage
   nginx_local_auth:                                  # Local htpasswd storage
