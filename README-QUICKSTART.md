@@ -346,4 +346,4 @@ chmod +x "$RUN_ASSET"
 ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core up -d
 ```
 
-If your VM has limited resources, starting with `datapipe-core` only (without `datapipe-visualize-data`) is recommended.
+If your VM has limited resources, recommend starting with `datapipe-core` only (without `datapipe-visualize-data`).
