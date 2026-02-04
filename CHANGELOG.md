@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.5](https://github.com/jfaa-josh/stock-ops/compare/v0.12.4...v0.12.5) (2026-02-04)
+
+
+### Bug Fixes
+
+* **prod:** htpasswd check ([#48](https://github.com/jfaa-josh/stock-ops/issues/48)) ([59c9c96](https://github.com/jfaa-josh/stock-ops/commit/59c9c96b75e61403ba62d7805b98fdebf3479c03))
+
 ## [0.12.4](https://github.com/jfaa-josh/stock-ops/compare/v0.12.3...v0.12.4) (2026-02-04)
 
 
