@@ -23,7 +23,18 @@ elif [ "$MODE" = "prod" ]; then
     echo "PRODUCTION_DOMAIN is not set in .env" >&2
     exit 1
   fi
-  if [ ! -s "$PROD_HTPASSWD_PATH" ]; then
+  if [ -d "$PROD_HTPASSWD_PATH" ]; then
+    cat >&2 <<EOF
+Invalid production htpasswd path: $PROD_HTPASSWD_PATH is a directory, but it must be a file.
+
+Fix it with:
+  rm -rf $PROD_HTPASSWD_PATH
+  mkdir -p ./secrets
+  htpasswd -Bc $PROD_HTPASSWD_PATH produser
+EOF
+    exit 1
+  fi
+  if [ ! -f "$PROD_HTPASSWD_PATH" ] || [ ! -s "$PROD_HTPASSWD_PATH" ]; then
     cat >&2 <<EOF
 Missing production htpasswd file: $PROD_HTPASSWD_PATH
 
