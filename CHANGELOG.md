@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.4](https://github.com/jfaa-josh/stock-ops/compare/v0.12.3...v0.12.4) (2026-02-04)
+
+
+### Bug Fixes
+
+* **release trigger:** trigger release pipeline for last PR ([#46](https://github.com/jfaa-josh/stock-ops/issues/46)) ([f134007](https://github.com/jfaa-josh/stock-ops/commit/f1340074a25c41a67487a48025456a7fd3b77b01))
+
 ## [0.12.3](https://github.com/jfaa-josh/stock-ops/compare/v0.12.2...v0.12.3) (2026-02-04)
 
 
