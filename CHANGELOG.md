@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/jfaa-josh/stock-ops/compare/v0.12.2...v0.12.3) (2026-02-04)
+
+
+### Bug Fixes
+
+* **prodauth:** Fix/release cd bugs ([#43](https://github.com/jfaa-josh/stock-ops/issues/43)) ([eda88b5](https://github.com/jfaa-josh/stock-ops/commit/eda88b51d21ba039b5fd9218de16d181a76be06a))
+
 ## [0.12.2](https://github.com/jfaa-josh/stock-ops/compare/v0.12.1...v0.12.2) (2026-01-30)
 
 
