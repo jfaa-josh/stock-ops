@@ -15,5 +15,6 @@ if [ ! -f "$TEMPLATE_PATH" ]; then
   exit 1
 fi
 
-envsubst < "$TEMPLATE_PATH" > "$OUTPUT_PATH"
+# Only substitute known env vars so nginx variables like $host remain intact.
+envsubst '$PRODUCTION_DOMAIN' < "$TEMPLATE_PATH" > "$OUTPUT_PATH"
 exec nginx -g 'daemon off;'
