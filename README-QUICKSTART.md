@@ -44,7 +44,8 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
 
 ## Quickstart
 Use `stockops.sh` to start the stack. It sets the correct nginx mode and Prefect UI URL based on `local` or `prod`, and passes through docker compose flags.
-See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-cli-deployment) for an example production deployment ssh call seqeunce.
+For any hosting platform, ensure inbound TCP ports 80 (HTTP) and 443 (HTTPS) are open for your instance before you start.
+See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-cli-deployment) for an example production deployment ssh call sequence.
 1) Create an empty folder for deployment
 2) Download `docker-compose.vx.y.z.yml`, `stockops.sh`, and `.env.example` (or `default.env.example`) from the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
 3) Make the script executable:
@@ -151,6 +152,7 @@ Running with project name `-p datapipe` is optional. The benefit, shown here, is
 ```
 
 #### Stop / Restart / Remove:
+Note: use the same `stockops.sh` wrapper and the same `-f` + `--profile` values you used for `up`, otherwise compose may not target the right stack.
 
 *Stop (keep containers/data):*
 ```bash
@@ -340,7 +342,14 @@ mkdir -p secrets
 htpasswd -Bc ./secrets/prod.htpasswd produser
 ```
 
-### 7) Launch (prod core profile)
+### 7) AWS Lightsail firewall
+
+Open these inbound ports in the Lightsail Networking tab:
+- TCP 80 (HTTP)
+- TCP 443 (HTTPS)
+- TCP 22 (SSH) for administration
+
+### 8) Launch (prod core profile)
 
 ```bash
 chmod +x "$RUN_ASSET"
@@ -348,3 +357,9 @@ chmod +x "$RUN_ASSET"
 ```
 
 If your VM has limited resources, recommend starting with `datapipe-core` only (without `datapipe-visualize-data`).
+
+### 9) Production login
+
+Access `https://$PRODUCTION_DOMAIN/` and authenticate with:
+- Username: `produser`
+- Password: the one you set with `htpasswd` in step 6
