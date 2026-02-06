@@ -13,4 +13,5 @@ COPY certs/live/stockops.local/privkey.pem /etc/letsencrypt/privkey.pem
 
 # Utility script(s)
 COPY scripts/nginx-reload-loop.sh /scripts/nginx-reload-loop.sh
-RUN chmod +x /scripts/nginx-reload-loop.sh
+COPY scripts/nginx-entrypoint.sh /scripts/nginx-entrypoint.sh
+RUN chmod +x /scripts/nginx-reload-loop.sh /scripts/nginx-entrypoint.sh

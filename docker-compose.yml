@@ -73,7 +73,7 @@ services:
       - certs_www:/var/www/certbot:ro
       - ./secrets/prod.htpasswd:/etc/nginx/prod/htpasswd:ro  # Production htpasswd file (host-managed)
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
-    command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec nginx -g 'daemon off;'"]
+    command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec /scripts/nginx-entrypoint.sh"]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 10s
@@ -101,6 +101,7 @@ services:
     volumes:
       - nginx_local_auth:/etc/nginx-local:rw
     restart: unless-stopped
+    command: ["/bin/sh", "-c", "exec /scripts/nginx-entrypoint.sh"]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 10s
