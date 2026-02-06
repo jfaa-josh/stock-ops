@@ -97,7 +97,7 @@ services:
       - "443:443"
     profiles: ["nginx-local"]
     environment:
-      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-empty
+      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-local
     volumes:
       - nginx_local_auth:/etc/nginx-local:rw
     restart: unless-stopped
