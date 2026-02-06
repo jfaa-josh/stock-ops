@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.8](https://github.com/jfaa-josh/stock-ops/compare/v0.12.7...v0.12.8) (2026-02-06)
+
+
+### Bug Fixes
+
+* **nginx-entrypoint-bug:** Fixing bug in nginx-entrypoint.sh that tried to set empty env vars. ([#54](https://github.com/jfaa-josh/stock-ops/issues/54)) ([8c702ae](https://github.com/jfaa-josh/stock-ops/commit/8c702ae6a8c4bb57628dea2f3887f86de5a2012d))
+
 ## [0.12.7](https://github.com/jfaa-josh/stock-ops/compare/v0.12.6...v0.12.7) (2026-02-06)
 
 
