@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.6](https://github.com/jfaa-josh/stock-ops/compare/v0.12.5...v0.12.6) (2026-02-06)
+
+
+### Bug Fixes
+
+* **conf:** Fix to require local to use stockops.conf.template so that prod and local each access their own respective conf file. ([#50](https://github.com/jfaa-josh/stock-ops/issues/50)) ([a63bf23](https://github.com/jfaa-josh/stock-ops/commit/a63bf23c97d763a92389b8b4c7c73045cc537443))
+
 ## [0.12.5](https://github.com/jfaa-josh/stock-ops/compare/v0.12.4...v0.12.5) (2026-02-04)
 
 
