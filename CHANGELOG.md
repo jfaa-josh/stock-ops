@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.7](https://github.com/jfaa-josh/stock-ops/compare/v0.12.6...v0.12.7) (2026-02-06)
+
+
+### Bug Fixes
+
+* **nginx-entrypoint.sh:** Implemented nginx-entrypoint.sh to build conf templates and wired to dockercompose ([#52](https://github.com/jfaa-josh/stock-ops/issues/52)) ([a9c7530](https://github.com/jfaa-josh/stock-ops/commit/a9c753026aadaa5347eeaf1eb2b80f8de4e9222f))
+
 ## [0.12.6](https://github.com/jfaa-josh/stock-ops/compare/v0.12.5...v0.12.6) (2026-02-06)
 
 
