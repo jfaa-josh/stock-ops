@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.9](https://github.com/jfaa-josh/stock-ops/compare/v0.12.8...v0.12.9) (2026-02-10)
+
+
+### Bug Fixes
+
+* **housekeeping:** Fix/housekeeping ([#56](https://github.com/jfaa-josh/stock-ops/issues/56)) ([5a6db5c](https://github.com/jfaa-josh/stock-ops/commit/5a6db5c530d5ce0d8026029af1d1e4cbcf4d057a))
+
 ## [0.12.8](https://github.com/jfaa-josh/stock-ops/compare/v0.12.7...v0.12.8) (2026-02-06)
 
 
