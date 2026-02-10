@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.12](https://github.com/jfaa-josh/stock-ops/compare/v0.12.11...v0.12.12) (2026-02-10)
+
+
+### Bug Fixes
+
+* **debugging-ci:** Added better logging to test for ci bug ([#62](https://github.com/jfaa-josh/stock-ops/issues/62)) ([8f55d8a](https://github.com/jfaa-josh/stock-ops/commit/8f55d8acee6ee1b427e11227a1f23f98d90d8134))
+
 ## [0.12.11](https://github.com/jfaa-josh/stock-ops/compare/v0.12.10...v0.12.11) (2026-02-10)
 
 
