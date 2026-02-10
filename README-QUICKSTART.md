@@ -40,6 +40,11 @@ StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel co
   newgrp docker
   ```
 
+  Windows/WSL note: if you see line-ending warnings when running `git add` or `/bin/sh^M` errors, set Git to keep LF:
+  ```bash
+  git config --global core.autocrlf input
+  ```
+
 ---
 
 ## Quickstart
