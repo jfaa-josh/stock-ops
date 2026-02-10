@@ -75,7 +75,7 @@ services:
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
     command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec /scripts/nginx-entrypoint.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null --no-check-certificate https://127.0.0.1/ico/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --server-response --spider --no-check-certificate https://127.0.0.1/ 2>&1 | awk '/^  HTTP/{code=$2} END{exit (code==200||code==301||code==302||code==401)?0:1}'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -103,7 +103,7 @@ services:
     restart: unless-stopped
     command: ["/bin/sh", "-c", "exec /scripts/nginx-entrypoint.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null --no-check-certificate https://127.0.0.1/ico/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --server-response --spider --no-check-certificate https://127.0.0.1/ 2>&1 | awk '/^  HTTP/{code=$2} END{exit (code==200||code==301||code==302||code==401)?0:1}'"]
       interval: 10s
       timeout: 5s
       retries: 5
