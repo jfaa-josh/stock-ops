@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.11](https://github.com/jfaa-josh/stock-ops/compare/v0.12.10...v0.12.11) (2026-02-10)
+
+
+### Bug Fixes
+
+* **ci2:** Line endings problem fix ([#60](https://github.com/jfaa-josh/stock-ops/issues/60)) ([af19b7b](https://github.com/jfaa-josh/stock-ops/commit/af19b7b38369999117f85648f523b84ac45ecc81))
+
 ## [0.12.10](https://github.com/jfaa-josh/stock-ops/compare/v0.12.9...v0.12.10) (2026-02-10)
 
 
