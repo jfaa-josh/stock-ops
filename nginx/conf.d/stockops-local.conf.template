@@ -59,6 +59,11 @@ server {
     proxy_pass http://$sqlite_backend/;
   }
 
+  location /cadvisor/ {
+    set $cadvisor_backend "cadvisor:8080";
+    proxy_pass http://$cadvisor_backend/;
+  }
+
   location / {
     set $streamlit_backend "streamlit:8501";
     proxy_pass http://$streamlit_backend;

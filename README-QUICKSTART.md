@@ -205,6 +205,7 @@ A dedicated listener on port 80 immediately issues `301 https://$host$request_ur
 - `/` → Streamlit UI
 - `/prefect/` → Prefect server API/UI
 - `/sqlite/` → SQLite Browser (only available when `datapipe-visualize-data` is active)
+- `/cadvisor/` → cAdvisor monitoring (available when `nginx-prod` is running)
 
 The nginx mode is the only way to reach services from outside the Docker network; services remain internal by default. `nginx-local` uses a bundled htpasswd, and `nginx-prod` uses a host-managed htpasswd file at `./secrets/prod.htpasswd`.
 
@@ -349,7 +350,36 @@ Open these inbound ports in the Lightsail Networking tab:
 - TCP 443 (HTTPS)
 - TCP 22 (SSH) for administration
 
-### 8) Launch (prod core profile)
+### 8) Configure Docker log rotation (recommended)
+
+Limit container log growth to prevent disk/IO pressure:
+
+```bash
+sudo tee /etc/docker/daemon.json <<'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+
+sudo systemctl restart docker
+```
+
+### 9) Disable fwupd-refresh (recommended)
+
+```bash
+sudo systemctl disable --now fwupd-refresh.timer
+```
+
+### 10) Limit journald size (recommended)
+
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d
+printf "[Journal]\nSystemMaxUse=200M\nRuntimeMaxUse=50M\n" | sudo tee /etc/systemd/journald.conf.d/limits.conf
+sudo systemctl restart systemd-journald
+```
+
+### 11) Launch (prod core profile)
 
 ```bash
 chmod +x "$RUN_ASSET"
@@ -358,7 +388,7 @@ chmod +x "$RUN_ASSET"
 
 If your VM has limited resources, recommend starting with `datapipe-core` only (without `datapipe-visualize-data`).
 
-### 9) Production login
+### 12) Production login
 
 Access `https://$PRODUCTION_DOMAIN/` and authenticate with:
 - Username: `produser`
