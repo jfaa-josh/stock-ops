@@ -9,6 +9,8 @@ fi
 
 shift
 
+rm -f .env.runtime.*
+
 PROD_HTPASSWD_PATH="./secrets/prod.htpasswd"
 
 if [ -z "${PRODUCTION_DOMAIN:-}" ] && [ -f ".env" ]; then
