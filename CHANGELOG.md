@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.15](https://github.com/jfaa-josh/stock-ops/compare/v0.12.14...v0.12.15) (2026-02-10)
+
+
+### Bug Fixes
+
+* **TLS2:** Higher resolution TLS check that ensures Nginx is returning an acceptable HTTP status code over HTTPS ([#68](https://github.com/jfaa-josh/stock-ops/issues/68)) ([e1dda57](https://github.com/jfaa-josh/stock-ops/commit/e1dda57bd71ab5cb42ecba46f2c23f7dcfda23bf))
+
 ## [0.12.14](https://github.com/jfaa-josh/stock-ops/compare/v0.12.13...v0.12.14) (2026-02-10)
 
 
