@@ -58,6 +58,15 @@ class ReadProcess:
 
         rows: list[dict] = sql_reader.read_dt_range(db_files, ticker, interval, start, end)
 
+        if not rows:
+            raise RuntimeError(
+                "SQLiteReader.read_dt_range returned 0 rows for "
+                f"{self.provider=} {self.data_type=} {self.exchange=} "
+                f"{ticker=} {interval=} {start_date=} {end_date=} "
+                f"{root=} db_files={[str(p) for p in db_files]!r} "
+                f"exists={[p.exists() for p in db_files]!r}"
+            )
+
         return rows
 
     def get_df(self, data: list[dict]) -> pd.DataFrame:
@@ -76,7 +85,7 @@ class ReadProcess:
         df = pd.DataFrame(data)
 
         if not hasattr(self, "ts_col"):
-            set_ts_col(self.provider, self.data_type)
+            self.ts_col = set_ts_col(self.provider, self.data_type)
         df = set_index(df)
 
         return df
