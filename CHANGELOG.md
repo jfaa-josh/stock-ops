@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.13](https://github.com/jfaa-josh/stock-ops/compare/v0.12.12...v0.12.13) (2026-02-10)
+
+
+### Bug Fixes
+
+* **reorder-ci-again:** ensure reader runs after writer in ci ([#64](https://github.com/jfaa-josh/stock-ops/issues/64)) ([b37e044](https://github.com/jfaa-josh/stock-ops/commit/b37e044864c2a610ce7de1efaf8a69c2bd8a620f))
+
 ## [0.12.12](https://github.com/jfaa-josh/stock-ops/compare/v0.12.11...v0.12.12) (2026-02-10)
 
 
