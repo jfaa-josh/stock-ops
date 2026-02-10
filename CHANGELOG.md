@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.10](https://github.com/jfaa-josh/stock-ops/compare/v0.12.9...v0.12.10) (2026-02-10)
+
+
+### Bug Fixes
+
+* **ci:** Re-order tests in ci to avoid a possible race conditions which caused a ci fail in test_data.txt processing (shape returned 1 row short of input dataset) ([#58](https://github.com/jfaa-josh/stock-ops/issues/58)) ([091ca20](https://github.com/jfaa-josh/stock-ops/commit/091ca208bfb50b0e5afb4d7cb56657f0015c85d6))
+
 ## [0.12.9](https://github.com/jfaa-josh/stock-ops/compare/v0.12.8...v0.12.9) (2026-02-10)
 
 
