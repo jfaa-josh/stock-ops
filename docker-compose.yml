@@ -75,7 +75,7 @@ services:
     restart: unless-stopped                           # Auto-restart unless explicitly stopped
     command: ["/bin/sh", "-c", "/scripts/nginx-reload-loop.sh & exec /scripts/nginx-entrypoint.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ico/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -103,7 +103,7 @@ services:
     restart: unless-stopped
     command: ["/bin/sh", "-c", "exec /scripts/nginx-entrypoint.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ico/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -267,6 +267,19 @@ services:
     security_opt:
       - seccomp:unconfined                            # Relax default seccomp profile so GUI dependencies run properly
     restart: unless-stopped                           # Auto-restart unless you explicitly stop the container
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    profiles: ["nginx-prod"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: unless-stopped
 
   init-htpasswd-local:
     image: stockops-htpasswd
