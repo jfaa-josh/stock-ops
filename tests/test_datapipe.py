@@ -8,8 +8,8 @@ import pytest
 ENTRYPOINTS = [
     ("local_workflows.streamlit_local.local_streamlit_ci", "main"),
     ("local_workflows.local_ETL", "test_ci"),
-    ("local_workflows.reader_local.local_read_ci", "main"),
     ("local_workflows.local_write", "main"),
+    ("local_workflows.reader_local.local_read_ci", "main"),
 ]
 
 pytestmark = pytest.mark.integration
