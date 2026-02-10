@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.14](https://github.com/jfaa-josh/stock-ops/compare/v0.12.13...v0.12.14) (2026-02-10)
+
+
+### Bug Fixes
+
+* **TLS-healthcheck:** Skipping TLS healthcheck in nginx to avoid overly rigid req causing log fails repeatedly ([#66](https://github.com/jfaa-josh/stock-ops/issues/66)) ([c2fb61d](https://github.com/jfaa-josh/stock-ops/commit/c2fb61d8c6833cfd4015cca2a6aad11866859b63))
+
 ## [0.12.13](https://github.com/jfaa-josh/stock-ops/compare/v0.12.12...v0.12.13) (2026-02-10)
 
 
