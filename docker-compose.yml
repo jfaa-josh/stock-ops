@@ -10,6 +10,10 @@ x-common-envvars: &common-envvars
   ENV: production                                     # Set environment to production so you skip load_dotenv()
   PREFECT_DEFAULT_WORK_POOL_NAME: default             # Default work pool for Prefect tasks
 
+networks:
+  default:
+    enable_ipv6: true
+
 services:
   ###BASELINE SERVICES ALWAYS ON >>>>>>>>>>>>>>>>>>>>>>>>>>>
   init-db-permissions:                                # A quick service to set permissions for app/data volume
