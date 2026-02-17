@@ -57,9 +57,9 @@ jobs:                                         # Top-level collection of jobs
           set -euo pipefail
           svcs=$(yq -r '.services
                       | to_entries
-                      | map(select(.value.build) | "\(.key)\t\(.value.image // .key)")
+                      | map(select(.value.build) | "\(.key)|\(.value.image // .key)")
                       | .[]' docker-compose.yml \
-                | awk -F'\t' '!seen[$2]++ {print $1}' \
+                | awk -F'|' '!seen[$2]++ {print $1}' \
                 | tr '\n' ' ' | sed 's/ $//')
           imgs=$(yq -r '.services
                       | to_entries
