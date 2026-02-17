@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.17](https://github.com/jfaa-josh/stock-ops/compare/v0.12.16...v0.12.17) (2026-02-17)
+
+
+### Bug Fixes
+
+* **dedup-release:** Fixing cd.yml so building nginx service twice doesnt cause a crash (rare) since we pull the same image twice (dedup services). ([#72](https://github.com/jfaa-josh/stock-ops/issues/72)) ([c141081](https://github.com/jfaa-josh/stock-ops/commit/c1410816abc3c30e5e1caa574a40e0d2950a7e1c))
+
 ## [0.12.16](https://github.com/jfaa-josh/stock-ops/compare/v0.12.15...v0.12.16) (2026-02-17)
 
 
