@@ -70,6 +70,10 @@ See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-
    ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
    ```
    (Use `local` instead of `prod` to start the local nginx mode and self-signed `stockops.local` certs.)
+   For host-managed nginx (recommended on IPv6-only hosts without Docker IPv6 NAT), use:
+   ```bash
+   PROXY_MODE=host ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   ```
 8) Access the UI:
    - Local: `https://stockops.local/`
    - Production: `https://your.production.domain/`
@@ -85,8 +89,9 @@ Example assets:
 - `docker-compose.v1.2.3.yml`
 - `stockops.sh`
 - `.env.example` (or `default.env.example`)
+- `nginx/host/stockops-host.conf.template` (for host nginx in IPv6-only deployments)
 
-Place all three in the same directory. These files reference immutable image tags—no local build required.
+Place all files in the same directory. These files reference immutable image tags—no local build required.
 
 ### 2. Configure Environment
 Rename `.env.example` (or `default.env.example`) to `.env` in the same directory as the compose file, then update the placeholder values:
@@ -214,6 +219,25 @@ A dedicated listener on port 80 immediately issues `301 https://$host$request_ur
 
 The nginx mode is the only way to reach services from outside the Docker network; services remain internal by default. `nginx-local` uses a bundled htpasswd, and `nginx-prod` uses a host-managed htpasswd file at `./secrets/prod.htpasswd`.
 
+#### Host-managed nginx (IPv6-friendly)
+Some hosts cannot publish IPv6 ports through Docker due to missing kernel NAT targets. For those, run nginx on the host and proxy to the loopback ports exposed by the compose file.
+
+Steps:
+1. Start the stack in host-proxy mode:
+   ```bash
+   PROXY_MODE=host ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   ```
+2. Install nginx and certbot on the host.
+3. Use `nginx/host/stockops-host.conf.template` as the server block template and replace `${PRODUCTION_DOMAIN}`.
+4. Copy `./secrets/prod.htpasswd` to `/etc/nginx/prod.htpasswd`.
+5. Request and renew certs with host certbot.
+
+Notes:
+1. The compose file binds Streamlit, Prefect, and SQLite Browser to `127.0.0.1`, so they are reachable only from the host. The host nginx proxies to:
+   - `http://127.0.0.1:8501` for `/`
+   - `http://127.0.0.1:4200` for `/api/` and `/prefect/`
+   - `http://127.0.0.1:3000` for `/sqlite/` (only when `datapipe-visualize-data` is enabled)
+
 #### Basic authorization
 
 Local mode ships with a bundled `localadmin` user. It is seeded into a named volume on first start, so changes persist across container recreation. To update it:
@@ -221,11 +245,16 @@ Local mode ships with a bundled `localadmin` user. It is seeded into a named vol
 ./stockops.sh local -p datapipe -f docker-compose.vx.y.z.yml exec nginx-local \
   htpasswd -B /etc/nginx-local/htpasswd localadmin
 ```
-For production, `nginx-prod` reads `./secrets/prod.htpasswd` from the host. Create this file before the first `prod` startup (the wrapper checks and fails fast if it is missing), and run the same command again any time you want to rotate credentials:
+For production with dockerized nginx (`nginx-prod`), it reads `./secrets/prod.htpasswd` from the host. Create this file before the first `prod` startup (the wrapper checks and fails fast if it is missing), and run the same command again any time you want to rotate credentials:
 ```bash
 # Create or overwrite production credentials used by nginx-prod
 mkdir -p secrets
 htpasswd -Bc ./secrets/prod.htpasswd produser
+```
+
+For host-proxy mode (`PROXY_MODE=host`), the host nginx reads `/etc/nginx/prod.htpasswd`. Copy your generated file into place:
+```bash
+sudo cp ./secrets/prod.htpasswd /etc/nginx/prod.htpasswd
 ```
 
 To reset local auth to the default `localadmin` user:
@@ -394,6 +423,128 @@ chmod +x "$RUN_ASSET"
 If your VM has limited resources, recommend starting with `datapipe-core` only (without `datapipe-visualize-data`).
 
 ### 12) Production login
+
+Access `https://$PRODUCTION_DOMAIN/` and authenticate with:
+- Username: `produser`
+- Password: the one you set with `htpasswd` in step 6
+
+---
+
+## Appendix: Example IPv6-only VM deployment (host nginx)
+
+This appendix shows a production ssh sequence for IPv6-only hosts where Docker cannot publish IPv6 ports. It uses host nginx to terminate TLS and proxy to loopback ports exposed by the compose file. When you run `PROXY_MODE=host`, the dockerized `nginx-prod`, `certbot-init`, and `certbot` services do not start, so you must initialize TLS certificates on the host.
+
+### 1) Create deployment directory
+
+```bash
+mkdir -p ~/stock-ops
+cd ~/stock-ops
+```
+
+### 2) Install dependencies
+
+```bash
+set -euo pipefail
+
+sudo apt-get update -y
+sudo apt-get install -y curl ca-certificates gnupg
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+
+sudo apt-get install -y gh
+gh --version
+
+sudo apt-get install -y apache2-utils nginx certbot python3-certbot-nginx
+```
+
+### 3) Set release/tag and asset names
+
+```bash
+export TAG="vx.y.z"
+export OWNER="jfaa-josh"
+export REPO="stock-ops"
+
+export COMPOSE_ASSET="docker-compose.${TAG}.yml"
+export ENV_ASSET="default.env.example"
+export RUN_ASSET="stockops.sh"
+export HOST_NGINX_ASSET="stockops-host.conf.template"
+```
+
+### 4) Authenticate and download release files
+
+```bash
+gh auth login -h github.com -p https -w
+gh release download "$TAG" -R "$OWNER/$REPO" -p "$COMPOSE_ASSET" -p "$ENV_ASSET" -p "$RUN_ASSET" -p "$HOST_NGINX_ASSET"
+ls -la
+```
+
+### 5) (Optional) Fix IPv6 DNS on the VM
+
+If your VM has unreliable IPv6 DNS resolution, set explicit resolvers for the primary interface before downloading assets:
+
+```bash
+sudo resolvectl dns eth0 2a00:1098:2c::1 2a01:4f8:c2c:123f::1 2a00:1098:2b::1
+sudo resolvectl domain eth0 "~."
+sudo systemctl restart systemd-resolved
+```
+
+### 5) Create and edit `.env`
+
+```bash
+mv "$ENV_ASSET" .env
+nano .env
+```
+
+Fill in at least your provider keys and production values `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL`.
+
+### 6) Create production basic-auth credentials
+
+```bash
+mkdir -p secrets
+htpasswd -Bc ./secrets/prod.htpasswd produser
+```
+
+### 7) Configure DNS and firewall
+
+1. Create an AAAA record for `PRODUCTION_DOMAIN` pointing to your VM IPv6 address.
+2. Ensure inbound IPv6 TCP ports 80 and 443 are allowed in your provider firewall.
+
+### 8) Configure host nginx
+
+```bash
+sudo mkdir -p /var/www/certbot
+sudo cp ./secrets/prod.htpasswd /etc/nginx/prod.htpasswd
+
+set -a
+. ./.env
+set +a
+envsubst '${PRODUCTION_DOMAIN}' < stockops-host.conf.template | sudo tee /etc/nginx/sites-available/stockops >/dev/null
+sudo ln -sf /etc/nginx/sites-available/stockops /etc/nginx/sites-enabled/stockops
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 9) Request TLS certificate (host certbot)
+
+```bash
+sudo certbot --nginx -d "$PRODUCTION_DOMAIN" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email --non-interactive
+```
+
+### 10) Launch StockOps (host-proxy mode)
+
+```bash
+chmod +x "$RUN_ASSET"
+PROXY_MODE=host ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core up -d
+```
+
+If you want SQLite Browser:
+
+```bash
+PROXY_MODE=host ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core --profile datapipe-visualize-data up -d
+```
+
+### 11) Production login
 
 Access `https://$PRODUCTION_DOMAIN/` and authenticate with:
 - Username: `produser`

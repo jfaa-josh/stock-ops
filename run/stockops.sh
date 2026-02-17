@@ -17,6 +17,8 @@ if [ -z "${PRODUCTION_DOMAIN:-}" ] && [ -f ".env" ]; then
   PRODUCTION_DOMAIN="$(sed -n 's/^PRODUCTION_DOMAIN=//p' .env | tail -n 1)"
 fi
 
+PROXY_MODE="${PROXY_MODE:-docker}"
+
 if [ "$MODE" = "local" ]; then
   PREFECT_UI_API_URL="https://stockops.local/api"
   PROFILE_DEFAULT="--profile nginx-local"
@@ -51,7 +53,11 @@ EOF
     exit 1
   fi
   PREFECT_UI_API_URL="https://${PRODUCTION_DOMAIN}/api"
-  PROFILE_DEFAULT="--profile nginx-prod"
+  if [ "$PROXY_MODE" = "host" ]; then
+    PROFILE_DEFAULT=""
+  else
+    PROFILE_DEFAULT="--profile nginx-prod"
+  fi
 else
   echo "Unknown mode: $MODE (expected local or prod)" >&2
   exit 1

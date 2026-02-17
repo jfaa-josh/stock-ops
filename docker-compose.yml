@@ -43,6 +43,7 @@ services:
       interval: 5s                                    # Time between checks
       timeout: 5s                                     # How long to wait per check
       retries: 5
+    restart: unless-stopped
 
   redis:                                              # Redis cache/service for message brokering between containers
     image: redis:8                                    # Use Redis version 8 image
@@ -53,6 +54,7 @@ services:
       interval: 5s                                    # Check every 5 seconds
       timeout: 5s                                     # Timeout per check
       retries: 5                                      # Number of retries before marking unhealthy
+    restart: unless-stopped
 
   nginx-prod:                                             # Reverse proxy for UI services -> single entrypoint
     image: stockops-nginx                              # Custom nginx image with baked configs/certs
@@ -149,6 +151,7 @@ services:
       timeout: 5s                                     # Fail if it takes >5s
       retries: 5                                      # Mark unhealthy after 5 failed checks
       start_period: 10s                               # Give it 10s to warm up before checking
+    restart: unless-stopped
 
   prefect-server:                                     # Prefect API + services container
     <<: *common-envfile                               # Load common .env file for environment variables
@@ -180,6 +183,8 @@ services:
         condition: service_healthy                    # Wait for Postgres to be ready
       redis:
         condition: service_healthy                    # Wait for Redis to be ready
+    ports:
+      - "127.0.0.1:4200:4200"
     healthcheck:                                      # Verify the API comes up successfully
       test: [
         "CMD", "python", "-c",
@@ -194,6 +199,7 @@ services:
       timeout: 3s                                     # Timeout each check after 3 seconds
       retries: 10                                     # Try up to 10 times before marking unhealthy
       start_period: 5s                                # give the API a moment to come up
+    restart: unless-stopped
 
   prefect-serve:                                      # Prefect agent for local (no worker pool/no deployment)
     <<: *common-envfile                               # Load common .env file for environment variables
@@ -228,6 +234,7 @@ services:
       timeout: 5s                                     # Timeout each check after 5 seconds
       retries: 5                                      # Retry up to 5 times before marking unhealthy
       start_period: 10s                               # Wait 10 seconds before starting health checks
+    restart: unless-stopped
 
   streamlit:                                          # Streamlit UI container
     <<: *common-envfile                               # Load common .env file for environment variables
@@ -241,12 +248,15 @@ services:
       prefect-serve:
         condition: service_healthy                    # Wait until Prefect server is ready
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
+    ports:
+      - "127.0.0.1:8501:8501"
     environment:
       <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api   # Prefect API URL for Streamlit to trigger flows
       VERBOSE_LOGGING: "false"                        # Sets streamlit_ui code var to reduce logging ("true"/"false")
       PYTHONPATH: /app:/app/src                       # Override .env's ./src to allow relative imports for pytest
     command: streamlit run datapipe_ui/frontend.py      # Launch the Streamlit application
+    restart: unless-stopped
 
   ###DATA PIPELINE OPTIONAL SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
   sqlitebrowser:
@@ -260,6 +270,8 @@ services:
       init-db-permissions:                            # Ensure permissions to access files in db
         condition: service_completed_successfully
     profiles: ["datapipe-visualize-data"]             # Service only starts with `--profile datapipe-visualize-data`
+    ports:
+      - "127.0.0.1:3000:3000"
     environment:
       - PUID=1000                                     # Host user ID (so container files have correct ownership)
       - PGID=1000                                     # Host group ID (same reason as above)
