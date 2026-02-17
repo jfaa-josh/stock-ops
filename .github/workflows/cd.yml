@@ -144,4 +144,5 @@ jobs:                                         # Top-level collection of jobs
             README-QUICKSTART.md
             LICENSE.md
             run/stockops.sh
+            nginx/host/stockops-host.conf.template
           body_path: README-QUICKSTART.md        # makes the release description this README
