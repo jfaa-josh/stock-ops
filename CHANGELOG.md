@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.19](https://github.com/jfaa-josh/stock-ops/compare/v0.12.18...v0.12.19) (2026-02-17)
+
+
+### Bug Fixes
+
+* **bugfix3:** bug fix release 3 ([#76](https://github.com/jfaa-josh/stock-ops/issues/76)) ([5a1aad4](https://github.com/jfaa-josh/stock-ops/commit/5a1aad4e98c3f78cfd0efc0610c61c5a689f0e2b))
+
 ## [0.12.18](https://github.com/jfaa-josh/stock-ops/compare/v0.12.17...v0.12.18) (2026-02-17)
 
 
