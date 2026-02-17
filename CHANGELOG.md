@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.18](https://github.com/jfaa-josh/stock-ops/compare/v0.12.17...v0.12.18) (2026-02-17)
+
+
+### Bug Fixes
+
+* **release-bugfix:** Bug fix for cd release fix ([#74](https://github.com/jfaa-josh/stock-ops/issues/74)) ([78ca631](https://github.com/jfaa-josh/stock-ops/commit/78ca631bd20e57ba6a895391ad0d04843f8fbfc1))
+
 ## [0.12.17](https://github.com/jfaa-josh/stock-ops/compare/v0.12.16...v0.12.17) (2026-02-17)
 
 
