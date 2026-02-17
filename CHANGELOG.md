@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.16](https://github.com/jfaa-josh/stock-ops/compare/v0.12.15...v0.12.16) (2026-02-17)
+
+
+### Bug Fixes
+
+* **ipv6:** Fix/ipv6 default dockercompose ([#70](https://github.com/jfaa-josh/stock-ops/issues/70)) ([4ca1e1c](https://github.com/jfaa-josh/stock-ops/commit/4ca1e1c4cc81bbfc662a5b3e3bfc49270a08ccbd))
+
 ## [0.12.15](https://github.com/jfaa-josh/stock-ops/compare/v0.12.14...v0.12.15) (2026-02-10)
 
 
