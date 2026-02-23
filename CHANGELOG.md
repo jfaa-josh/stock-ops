@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.22](https://github.com/jfaa-josh/stock-ops/compare/v0.12.21...v0.12.22) (2026-02-23)
+
+
+### Bug Fixes
+
+* **ipv6-fix3:** Added inspect to ensure headers were handled correctly for ipv6 ([#82](https://github.com/jfaa-josh/stock-ops/issues/82)) ([f2270c1](https://github.com/jfaa-josh/stock-ops/commit/f2270c1d408d481ba18a1d163a08401b94cc2a49))
+
 ## [0.12.21](https://github.com/jfaa-josh/stock-ops/compare/v0.12.20...v0.12.21) (2026-02-23)
 
 
