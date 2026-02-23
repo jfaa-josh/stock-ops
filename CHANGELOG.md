@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.21](https://github.com/jfaa-josh/stock-ops/compare/v0.12.20...v0.12.21) (2026-02-23)
+
+
+### Bug Fixes
+
+* **ipv6-fix2:** fixing exception handling in streaming so that the ipv6 failback executes if ipv4 fails ([#80](https://github.com/jfaa-josh/stock-ops/issues/80)) ([91499c4](https://github.com/jfaa-josh/stock-ops/commit/91499c4168b0127b0455eb52075993f62117b387))
+
 ## [0.12.20](https://github.com/jfaa-josh/stock-ops/compare/v0.12.19...v0.12.20) (2026-02-23)
 
 
