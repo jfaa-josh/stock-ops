@@ -216,9 +216,20 @@ class EODHDStreamingService(AbstractStreamingService):
                     return
                 continue
 
-            except (OSError, websockets.InvalidURI, websockets.InvalidHandshake) as e:
+            except asyncio.CancelledError:
+                logger.info("[%s] Cancellation received; shutting down.", table_name)
+                raise
+
+            except Exception as e:
                 # If the first attempt failed, try a single IPv6 fallback (without forcing IPv6 permanently).
-                if last_ipv6_url is None:
+                if last_ipv6_url is None and isinstance(
+                    e,
+                    OSError
+                    | websockets.InvalidURI
+                    | websockets.InvalidHandshake
+                    | websockets.exceptions.InvalidURI
+                    | websockets.exceptions.InvalidHandshake,
+                ):
                     try:
                         parsed = urlparse(ws_url)
                         host = parsed.hostname
@@ -238,15 +249,7 @@ class EODHDStreamingService(AbstractStreamingService):
                     except Exception as fallback_err:
                         logger.warning("[%s] IPv6 fallback failed: %s", table_name, fallback_err)
 
-                if not await maybe_retry(e, "Connection error"):
-                    return
-                continue
-
-            except asyncio.CancelledError:
-                logger.info("[%s] Cancellation received; shutting down.", table_name)
-                raise
-
-            except Exception as e:
+                logger.warning("[%s] Unexpected error: %s", table_name, repr(e))
                 if not await maybe_retry(e, "Unexpected error"):
                     return
                 continue
