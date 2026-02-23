@@ -3,8 +3,10 @@ import json
 import logging
 import os
 import random
+import socket
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 import websockets
@@ -74,6 +76,70 @@ class EODHDStreamingService(AbstractStreamingService):
         started = loop.time()
         backoff = 1.0
         max_backoff = 60.0
+        last_ipv6_url = None
+
+        async def run_stream(
+            connect_url: str, *, server_hostname: str | None = None, host_header: str | None = None
+        ) -> None:
+            nonlocal backoff
+            async with websockets.connect(
+                connect_url,
+                ping_interval=45,
+                ping_timeout=45,
+                close_timeout=15,
+                max_queue=1000,
+                max_size=None,
+                server_hostname=server_hostname,
+                extra_headers={"Host": host_header} if host_header else None,
+            ) as websocket:
+                # Successful connect → reset backoff
+                backoff = 1.0
+
+                # Wait (briefly) for an auth banner; if first frame is not a banner, buffer it
+                buffered_raw = None
+                buffered_parsed = None
+                try:
+                    raw0 = await asyncio.wait_for(websocket.recv(), timeout=3)
+                    try:
+                        parsed0 = json.loads(raw0)
+                    except json.JSONDecodeError:
+                        parsed0 = None
+                    if isinstance(parsed0, dict) and parsed0.get("status_code") == 200:
+                        logger.info("[%s] Auth banner: %s", table_name, parsed0)
+                    else:
+                        buffered_raw, buffered_parsed = raw0, parsed0
+                        logger.debug("[%s] First frame not banner; buffering initial frame.", table_name)
+                except TimeoutError:
+                    logger.debug("No auth banner within 3s; proceeding to subscribe.")
+
+                subscribe_msg = {"action": "subscribe", "symbols": ",".join(tickers)}
+                await websocket.send(json.dumps(subscribe_msg))
+                logger.info("Subscribed to [%s] on %s", ",".join(tickers), connect_url)
+
+                tl = time_left()
+
+                async def run_read_loop(buf_raw, buf_parsed, data_type) -> None:
+                    if buf_raw is not None and isinstance(buf_parsed, dict):
+                        process_parsed(buf_parsed, buf_raw, data_type)
+
+                    async for message in websocket:
+                        try:
+                            data = json.loads(message)
+                        except json.JSONDecodeError:
+                            safe = (
+                                message.decode("utf-8", errors="replace")
+                                if isinstance(message, (bytes | bytearray))
+                                else str(message)
+                            )
+                            logger.warning("[%s] Non-JSON message: %s", table_name, safe)
+                            continue
+                        process_parsed(data, message, data_type)
+
+                if tl and tl > 0:
+                    async with asyncio.timeout(tl):
+                        await run_read_loop(buffered_raw, buffered_parsed, data_type)
+                else:
+                    await run_read_loop(buffered_raw, buffered_parsed, data_type)
 
         def time_left() -> float | None:
             if duration is None:
@@ -135,70 +201,10 @@ class EODHDStreamingService(AbstractStreamingService):
 
             try:
                 logger.info("Connecting to %s", ws_url)
-                async with websockets.connect(
-                    ws_url,
-                    ping_interval=45,
-                    ping_timeout=45,
-                    close_timeout=15,
-                    max_queue=1000,
-                    max_size=None,
-                ) as websocket:
-                    # Successful connect → reset backoff
-                    backoff = 1.0
+                await run_stream(ws_url)
 
-                    # Wait (briefly) for an auth banner; if first frame is not a banner, buffer it
-                    buffered_raw = None
-                    buffered_parsed = None
-                    try:
-                        raw0 = await asyncio.wait_for(websocket.recv(), timeout=3)
-                        try:
-                            parsed0 = json.loads(raw0)
-                        except json.JSONDecodeError:
-                            parsed0 = None
-                        if isinstance(parsed0, dict) and parsed0.get("status_code") == 200:
-                            logger.info("[%s] Auth banner: %s", table_name, parsed0)
-                        else:
-                            buffered_raw, buffered_parsed = raw0, parsed0
-                            logger.debug("[%s] First frame not banner; buffering initial frame.", table_name)
-                    except TimeoutError:
-                        logger.debug("No auth banner within 3s; proceeding to subscribe.")
-
-                    # Subscribe after handshake stage (or timeout)
-                    subscribe_msg = {"action": "subscribe", "symbols": ",".join(tickers)}
-                    await websocket.send(json.dumps(subscribe_msg))
-                    logger.info("Subscribed to [%s] on %s", ",".join(tickers), ws_url)
-
-                    # Compute remaining after subscribe
-                    tl = time_left()
-
-                    async def run_read_loop(buf_raw, buf_parsed, data_type) -> None:
-                        # Process buffered frame (if any) first
-                        if buf_raw is not None and isinstance(buf_parsed, dict):
-                            process_parsed(buf_parsed, buf_raw, data_type)
-
-                        # Main stream loop
-                        async for message in websocket:
-                            try:
-                                data = json.loads(message)
-                            except json.JSONDecodeError:
-                                safe = (
-                                    message.decode("utf-8", errors="replace")
-                                    if isinstance(message, (bytes | bytearray))
-                                    else str(message)
-                                )
-                                logger.warning("[%s] Non-JSON message: %s", table_name, safe)
-                                continue
-                            process_parsed(data, message, data_type)
-
-                    if tl and tl > 0:
-                        # Only apply timeout if we actually have a time budget
-                        async with asyncio.timeout(tl):
-                            await run_read_loop(buffered_raw, buffered_parsed, data_type)
-                    else:
-                        await run_read_loop(buffered_raw, buffered_parsed, data_type)
-
-                    # If we exit the read loop normally, loop back to reconnect unless duration expired
-                    continue
+                # If we exit the read loop normally, loop back to reconnect unless duration expired
+                continue
 
             except TimeoutError:
                 # This comes from asyncio.timeout(tl) expiring
@@ -211,6 +217,27 @@ class EODHDStreamingService(AbstractStreamingService):
                 continue
 
             except (OSError, websockets.InvalidURI, websockets.InvalidHandshake) as e:
+                # If the first attempt failed, try a single IPv6 fallback (without forcing IPv6 permanently).
+                if last_ipv6_url is None:
+                    try:
+                        parsed = urlparse(ws_url)
+                        host = parsed.hostname
+                        if host:
+                            infos = socket.getaddrinfo(host, None, socket.AF_INET6, socket.SOCK_STREAM)
+                            if infos:
+                                ipv6 = infos[0][4][0]
+                                netloc = f"[{ipv6}]"
+                                if parsed.port:
+                                    netloc += f":{parsed.port}"
+                                last_ipv6_url = urlunparse(
+                                    (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
+                                )
+                                logger.info("Retrying with IPv6 literal: %s", last_ipv6_url)
+                                await run_stream(last_ipv6_url, server_hostname=host, host_header=host)
+                                continue
+                    except Exception as fallback_err:
+                        logger.warning("[%s] IPv6 fallback failed: %s", table_name, fallback_err)
+
                 if not await maybe_retry(e, "Connection error"):
                     return
                 continue
