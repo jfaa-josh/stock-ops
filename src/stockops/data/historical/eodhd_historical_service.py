@@ -1,10 +1,12 @@
 import logging
 import os
+import socket
 from pathlib import Path
 from typing import cast
 from zoneinfo import ZoneInfo
 
 import requests
+from urllib3.util import connection as urllib3_connection
 
 from stockops.config import config, eodhd_config
 from stockops.data.database.write_buffer import emit
@@ -77,6 +79,7 @@ class EODHDHistoricalService(AbstractHistoricalService):
     def _fetch_data(self, ws_url: str, data_type: str, exchange: str, ticker: str, interval: str, test_mode: str):
         transform = TransformData("EODHD", f"historical_{data_type}", "to_db_writer", exchange)
         table_name = ticker
+        tried_ipv6 = False
 
         if test_mode == "ci":
             if data_type == "intraday":
@@ -105,13 +108,40 @@ class EODHDHistoricalService(AbstractHistoricalService):
                     }
                 ]
         else:
-            try:
-                resp = requests.get(ws_url, timeout=30)
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as e:
-                logger.warning("[%s] HTTP error fetching %s: %s", f"{ticker}.{exchange}", ws_url, e)
-                return
+            while True:
+                try:
+                    resp = requests.get(ws_url, timeout=30)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break
+                except Exception as e:
+                    # If IPv4 is unreachable on an IPv6-only host, retry once forcing IPv6 resolution.
+                    if not tried_ipv6:
+                        tried_ipv6 = True
+                        prev_allowed = urllib3_connection.allowed_gai_family
+                        try:
+                            urllib3_connection.allowed_gai_family = lambda: socket.AF_INET6
+                            logger.info(
+                                "[%s] IPv4 fetch failed; retrying over IPv6 for %s",
+                                f"{ticker}.{exchange}",
+                                ws_url,
+                            )
+                            resp = requests.get(ws_url, timeout=30)
+                            resp.raise_for_status()
+                            data = resp.json()
+                            break
+                        except Exception as retry_err:
+                            logger.warning(
+                                "[%s] IPv6 retry failed for %s: %s",
+                                f"{ticker}.{exchange}",
+                                ws_url,
+                                retry_err,
+                            )
+                            return
+                        finally:
+                            urllib3_connection.allowed_gai_family = prev_allowed
+                    logger.warning("[%s] HTTP error fetching %s: %s", f"{ticker}.{exchange}", ws_url, e)
+                    return
 
         if isinstance(data, list):
             for row in data:

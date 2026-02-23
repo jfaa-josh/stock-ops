@@ -328,15 +328,12 @@ cd ~/stock-ops
 ### 2) Installs as needed
 
 ```bash
-set -euo pipefail
-
 sudo apt-get update -y
 sudo apt-get install -y curl ca-certificates gnupg
 
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
 
 sudo apt-get install -y gh
-gh --version
 
 sudo apt-get install -y apache2-utils
 ```
@@ -444,17 +441,13 @@ cd ~/stock-ops
 ### 2) Install dependencies
 
 ```bash
-set -euo pipefail
-
 sudo apt-get update -y
 sudo apt-get install -y curl ca-certificates gnupg
 
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-
 sudo apt-get install -y gh
-gh --version
 
-sudo apt-get install -y apache2-utils nginx certbot python3-certbot-nginx
+sudo apt-get install -y apache2-utils nginx certbot
 ```
 
 ### 3) Set release/tag and asset names
@@ -509,29 +502,54 @@ htpasswd -Bc ./secrets/prod.htpasswd produser
 1. Create an AAAA record for `PRODUCTION_DOMAIN` pointing to your VM IPv6 address.
 2. Ensure inbound IPv6 TCP ports 80 and 443 are allowed in your provider firewall.
 
-### 8) Configure host nginx
+### 8) Configure host nginx + TLS (first-time setup)
+
+This step creates a temporary HTTP-only nginx site to complete the initial ACME challenge, issues a certificate with certbot using the webroot method, then swaps in the full TLS reverse-proxy config and enables WebSocket upgrades.
 
 ```bash
+sudo tee /etc/nginx/sites-available/stockops-http >/dev/null <<'EOF'
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${PRODUCTION_DOMAIN};
+
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+
+  location / {
+    return 301 https://$host$request_uri;
+  }
+}
+EOF
+
 sudo mkdir -p /var/www/certbot
 sudo cp ./secrets/prod.htpasswd /etc/nginx/prod.htpasswd
+sudo ln -sf /etc/nginx/sites-available/stockops-http /etc/nginx/sites-enabled/stockops
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl start nginx
+
+sudo certbot certonly --webroot -w /var/www/certbot \
+  -d "$PRODUCTION_DOMAIN" --email "$LETSENCRYPT_EMAIL" \
+  --agree-tos --no-eff-email --non-interactive
+
+sudo tee /etc/nginx/conf.d/connection_upgrade.conf >/dev/null <<'EOF'
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+EOF
 
 set -a
 . ./.env
 set +a
 envsubst '${PRODUCTION_DOMAIN}' < stockops-host.conf.template | sudo tee /etc/nginx/sites-available/stockops >/dev/null
-sudo ln -sf /etc/nginx/sites-available/stockops /etc/nginx/sites-enabled/stockops
-sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 9) Request TLS certificate (host certbot)
-
-```bash
-sudo certbot --nginx -d "$PRODUCTION_DOMAIN" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email --non-interactive
-```
-
-### 10) Launch StockOps (host-proxy mode)
+### 9) Launch StockOps (host-proxy mode)
 
 ```bash
 chmod +x "$RUN_ASSET"
@@ -544,7 +562,7 @@ If you want SQLite Browser:
 PROXY_MODE=host ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core --profile datapipe-visualize-data up -d
 ```
 
-### 11) Production login
+### 10) Production login
 
 Access `https://$PRODUCTION_DOMAIN/` and authenticate with:
 - Username: `produser`
