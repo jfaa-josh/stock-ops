@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.20](https://github.com/jfaa-josh/stock-ops/compare/v0.12.19...v0.12.20) (2026-02-23)
+
+
+### Bug Fixes
+
+* **ipv6-websockets:** Fix/housekeeping ([#78](https://github.com/jfaa-josh/stock-ops/issues/78)) ([6868695](https://github.com/jfaa-josh/stock-ops/commit/6868695b42d15743d4510f0b6b1c22a84b2e03d8))
+
 ## [0.12.19](https://github.com/jfaa-josh/stock-ops/compare/v0.12.18...v0.12.19) (2026-02-17)
 
 
