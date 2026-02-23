@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -82,6 +83,16 @@ class EODHDStreamingService(AbstractStreamingService):
             connect_url: str, *, server_hostname: str | None = None, host_header: str | None = None
         ) -> None:
             nonlocal backoff
+            connect_kwargs: dict = {}
+            if host_header:
+                try:
+                    param_names = set(inspect.signature(websockets.connect).parameters.keys())
+                except (TypeError, ValueError):
+                    param_names = set()
+                if "additional_headers" in param_names:
+                    connect_kwargs["additional_headers"] = {"Host": host_header}
+                elif "extra_headers" in param_names:
+                    connect_kwargs["extra_headers"] = {"Host": host_header}
             async with websockets.connect(
                 connect_url,
                 ping_interval=45,
@@ -90,7 +101,7 @@ class EODHDStreamingService(AbstractStreamingService):
                 max_queue=1000,
                 max_size=None,
                 server_hostname=server_hostname,
-                extra_headers={"Host": host_header} if host_header else None,
+                **connect_kwargs,
             ) as websocket:
                 # Successful connect → reset backoff
                 backoff = 1.0
