@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.23](https://github.com/jfaa-josh/stock-ops/compare/v0.12.22...v0.12.23) (2026-02-24)
+
+
+### Bug Fixes
+
+* **readme-docker-dns:** modified readme to include instructions for setting ipv6 capable DNS to docker compose ([#84](https://github.com/jfaa-josh/stock-ops/issues/84)) ([8e1da0d](https://github.com/jfaa-josh/stock-ops/commit/8e1da0df2211b48647e9c56d2b6a495b16d6b755))
+
 ## [0.12.22](https://github.com/jfaa-josh/stock-ops/compare/v0.12.21...v0.12.22) (2026-02-23)
 
 
