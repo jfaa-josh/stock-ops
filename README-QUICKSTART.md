@@ -471,17 +471,29 @@ gh release download "$TAG" -R "$OWNER/$REPO" -p "$COMPOSE_ASSET" -p "$ENV_ASSET"
 ls -la
 ```
 
-### 5) (Optional) Fix IPv6 DNS on the VM
+### 5) Configure host and Docker DNS for IPv6
 
-If your VM has unreliable IPv6 DNS resolution, set explicit resolvers for the primary interface before downloading assets:
+Set IPv6-capable DNS servers on the host, then configure Docker to use the same resolvers so containers can resolve AAAA records.
 
 ```bash
 sudo resolvectl dns eth0 2a00:1098:2c::1 2a01:4f8:c2c:123f::1 2a00:1098:2b::1
 sudo resolvectl domain eth0 "~."
 sudo systemctl restart systemd-resolved
+
+sudo tee /etc/docker/daemon.json >/dev/null <<'JSON'
+{
+  "dns": [
+    "2a00:1098:2c::1",
+    "2a01:4f8:c2c:123f::1",
+    "2a00:1098:2b::1"
+  ]
+}
+JSON
+
+sudo systemctl restart docker
 ```
 
-### 5) Create and edit `.env`
+### 6) Create and edit `.env`
 
 ```bash
 mv "$ENV_ASSET" .env
@@ -490,19 +502,19 @@ nano .env
 
 Fill in at least your provider keys and production values `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL`.
 
-### 6) Create production basic-auth credentials
+### 7) Create production basic-auth credentials
 
 ```bash
 mkdir -p secrets
 htpasswd -Bc ./secrets/prod.htpasswd produser
 ```
 
-### 7) Configure DNS and firewall
+### 8) Configure DNS and firewall
 
 1. Create an AAAA record for `PRODUCTION_DOMAIN` pointing to your VM IPv6 address.
 2. Ensure inbound IPv6 TCP ports 80 and 443 are allowed in your provider firewall.
 
-### 8) Configure host nginx + TLS (first-time setup)
+### 9) Configure host nginx + TLS (first-time setup)
 
 This step creates a temporary HTTP-only nginx site to complete the initial ACME challenge, issues a certificate with certbot using the webroot method, then swaps in the full TLS reverse-proxy config and enables WebSocket upgrades.
 
@@ -549,21 +561,15 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 9) Launch StockOps (host-proxy mode)
+### 10) Launch StockOps (host-proxy mode)
 
 ```bash
 chmod +x "$RUN_ASSET"
 PROXY_MODE=host ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core up -d
 ```
 
-If you want SQLite Browser:
-
-```bash
-PROXY_MODE=host ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core --profile datapipe-visualize-data up -d
-```
-
-### 10) Production login
+### 11) Production login
 
 Access `https://$PRODUCTION_DOMAIN/` and authenticate with:
 - Username: `produser`
-- Password: the one you set with `htpasswd` in step 6
+- Password: the one you set with `htpasswd` in step 7
