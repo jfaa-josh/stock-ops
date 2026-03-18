@@ -24,7 +24,6 @@ ui = [
 writer = [
   "redis",
   "numpy",
-  "matplotlib",
 ]
 
 [dependency-groups]
@@ -43,7 +42,8 @@ dev = [
     "streamlit",
     "requests",
     "streamlit-autorefresh",
-    "matplotlib",
+    "plotly",
+    "nbformat",
 ]
 
 [tool.ruff]

@@ -13,7 +13,7 @@ PKG_DIR = SRC_DIR / "stockops"
 
 ## Data directory
 def get_data_path(default_local):  # Switch for docker vs local
-    return Path(os.environ.get("DB_DATA_DIR", default_local))
+    return Path(os.environ.get("DB_DATA_DIR", str(default_local)))
 
 
 def get_writedata_path(data_dir):  # Switch for docker vs local

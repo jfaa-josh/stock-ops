@@ -19,6 +19,7 @@ __pycache__/
 # Virtual Envs
 # ======================
 .venv/
+.venv-local/
 venv/
 env/
 ENV/
@@ -108,8 +109,14 @@ junit-*.xml
 *.swo
 
 # ====================
+# Local plot outputs
+# ====================
+local_workflows/reader_local/plots/
+
+# ====================
 # IDEs and Editors
 # ====================
+.claude/
 .vscode/
 .idea/
 *.sublime-project
