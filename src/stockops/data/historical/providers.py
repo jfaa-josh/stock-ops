@@ -1,4 +1,5 @@
 from .eodhd_historical_service import EODHDHistoricalService
+from .ibkr_historical_service import IBKRHistoricalService
 
 # Later: add additional historical services here as needed
 
@@ -6,7 +7,7 @@ from .eodhd_historical_service import EODHDHistoricalService
 def get_historical_service(provider: str):
     if provider == "EODHD":
         return EODHDHistoricalService()
-    # elif provider == "A NEW PROVIDER HERE":
-    #     pass
+    elif provider == "IBKR":
+        return IBKRHistoricalService()
     else:
         raise ValueError(f"Unknown historical provider: {provider}")

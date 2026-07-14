@@ -1,5 +1,5 @@
+# %%
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from stockops.data.database.reader import ReadProcess
 
@@ -52,7 +52,7 @@ def run(provider, exchange, *, data_type, ticker, interval, start_date, end_date
 
 
 
-
+# %%
 # DAILY:
 daily = {'data_type': "historical_interday",
               'start_date': '2025-07-01',
@@ -64,7 +64,7 @@ daily = {'data_type': "historical_interday",
 df_day = run(provider, exchange, **daily)
 
 print(df_day.head())
-
+# %%
 # HOURLY:
 hourly = {'data_type': "historical_intraday",
               'start_date': '2025-07-01 09:30',
@@ -76,11 +76,11 @@ hourly = {'data_type': "historical_intraday",
 df_hr = run(provider, exchange, **hourly)
 
 print(df_hr.head())
-
+# %%
 # STREAMING:
 stream = {'data_type': "streaming",
-              'start_date': '2025-08-02 09:30',
-              'end_date': '2025-09-21 16:00',
+              'start_date': '2026-02-02 09:30',
+              'end_date': '2026-02-28 16:00',
               'ticker': 'SPY',
               'interval': None
               }
@@ -89,53 +89,56 @@ df_stream = run(provider, exchange, **stream)
 
 print(df_stream.head())
 
+##PLOTTING:
 
+# %%
+# RAW STREAMING ALL:
+import pandas as pd
+import plotly.graph_objects as go
 
-###PLOTTING:
+# Parse the date strings exactly (fast and strict)
+df = df_stream.copy().reset_index()
 
+# Get timezone name from the data (e.g. 'EST' or 'EDT')
+tz_name = df_stream.index[0].tzname()
 
-# # RAW STREAMING ALL:
-# import pandas as pd
-# import matplotlib.pyplot as plt
-# import matplotlib.dates as mdates
+# Helper to clean one series: ensure numeric y and drop rows with missing x/y
+def xy(df, ycol):
+    tmp = df[['date', ycol]].copy()
+    tmp[ycol] = pd.to_numeric(tmp[ycol], errors='coerce')
+    tmp = tmp.dropna(subset=['date', ycol])
+    tmp['date'] = tmp['date'].dt.tz_convert('America/New_York').dt.tz_localize(None)
+    return tmp['date'].to_numpy(), tmp[ycol].to_numpy()
 
-# # Parse the date strings exactly (fast and strict)
-# df = df_stream.copy()
-# df['date'] = pd.to_datetime(df['date'], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
+x_spot, y_spot = xy(df, 'price')
+x_bid,  y_bid  = xy(df, 'bid_price')
+x_ask,  y_ask  = xy(df, 'ask_price')
 
-# # Helper to clean one series: ensure numeric y and drop rows with missing x/y
-# def xy(df, ycol):
-#     tmp = df[['date', ycol]].copy()
-#     tmp[ycol] = pd.to_numeric(tmp[ycol], errors='coerce')
-#     tmp = tmp.dropna(subset=['date', ycol])
-#     return tmp['date'].to_numpy(), tmp[ycol].to_numpy()
+fig = go.Figure()
+fig.add_trace(go.Scattergl(x=x_spot, y=y_spot, mode='markers',
+                           marker=dict(size=4, opacity=0.9, color='black'),
+                           name='Spot Price'))
+fig.add_trace(go.Scattergl(x=x_bid,  y=y_bid,  mode='markers',
+                           marker=dict(size=4, opacity=0.9, color='blue'),
+                           name='Bid Price'))
+fig.add_trace(go.Scattergl(x=x_ask,  y=y_ask,  mode='markers',
+                           marker=dict(size=4, opacity=0.9, color='green'),
+                           name='Ask Price'))
 
-# x_spot, y_spot = xy(df, 'price')
-# x_bid,  y_bid  = xy(df, 'bid_price')
-# x_ask,  y_ask  = xy(df, 'ask_price')
+fig.update_layout(
+    title='Price vs Date',
+    xaxis_title=f'Date ({tz_name})',
+    yaxis_title='Price',
+    xaxis=dict(rangeslider=dict(visible=True), type='date'),
+    legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+)
+import webbrowser
+from pathlib import Path
+_plot_path = Path(__file__).parent / "plots" / "streaming_raw.html"
+fig.write_html(_plot_path)
+webbrowser.open(_plot_path.as_uri())
 
-# plt.figure(figsize=(12, 6))
-# plt.scatter(x_spot, y_spot, s=12, alpha=0.9, color='black', label='Spot Price')
-# plt.scatter(x_bid,  y_bid,  s=12, alpha=0.9, color='blue',  label='Bid Price')
-# plt.scatter(x_ask,  y_ask,  s=12, alpha=0.9, color='green', label='Ask Price')  # green label fixed
-
-# plt.xlabel('Date')
-# plt.ylabel('Price')
-# plt.title('Price vs Date')
-# plt.legend()
-# plt.grid(True, linestyle='--', linewidth=0.5, alpha=0.6)
-
-# # Nice date formatting
-# ax = plt.gca()
-# locator = mdates.AutoDateLocator()
-# ax.xaxis.set_major_locator(locator)
-# ax.xaxis.set_major_formatter(mdates.AutoDateFormatter(locator))
-# plt.gcf().autofmt_xdate()
-
-# plt.tight_layout()
-# plt.show()
-
-
+# %%
 # # STREAMING PLUS SINGLE DAY CANDLE
 # import pandas as pd
 # import matplotlib.pyplot as plt
@@ -231,40 +234,40 @@ print(df_stream.head())
 
 # plot_prices_with_candle(df_stream, df_day)
 
+# %%
+# # --- 1) Daily OHLC from df_daily.iloc[1] ---
+# row = df_day.iloc[1]
+# o_daily = row['open']
+# c_daily = row['close']
+# h_daily = row['high']
+# l_daily = row['low']
 
-# --- 1) Daily OHLC from df_daily.iloc[1] ---
-row = df_day.iloc[1]
-o_daily = row['open']
-c_daily = row['close']
-h_daily = row['high']
-l_daily = row['low']
+# print("From Daily Candle:")
+# print(f"  Open:  {o_daily}")
+# print(f"  Close: {c_daily}")
+# print(f"  High:  {h_daily}")
+# print(f"  Low:   {l_daily}")
 
-print("From Daily Candle:")
-print(f"  Open:  {o_daily}")
-print(f"  Close: {c_daily}")
-print(f"  High:  {h_daily}")
-print(f"  Low:   {l_daily}")
+# # --- 2) Intraday OHLC from df_stream (9:30–16:00) ---
+# df = df_stream.copy()
 
-# --- 2) Intraday OHLC from df_stream (9:30–16:00) ---
-df = df_stream.copy()
+# # Pick the trading day from the first timestamp (preserves tz if present)
+# first_ts = df.index[0]
+# day = first_ts.normalize()   # midnight of that calendar day, same tz-awareness
+# start = day + pd.Timedelta(hours=9, minutes=30)
+# end   = day + pd.Timedelta(hours=16)
 
-# Pick the trading day from the first timestamp (preserves tz if present)
-first_ts = df.index[0]
-day = first_ts.normalize()   # midnight of that calendar day, same tz-awareness
-start = day + pd.Timedelta(hours=9, minutes=30)
-end   = day + pd.Timedelta(hours=16)
-
-# Session slice
-session = df[(df.index >= start) & (df.index <= end)]
+# # Session slice
+# session = df[(df.index >= start) & (df.index <= end)]
 
 
-o_intraday = session.iloc[(session['date'] - start).abs().argmin()]['price']
-c_intraday = session.iloc[(session['date'] - end).abs().argmin()]['price']
-h_intraday = session['price'].max()
-l_intraday = session['price'].min()
+# o_intraday = session.iloc[(session['date'] - start).abs().argmin()]['price']
+# c_intraday = session.iloc[(session['date'] - end).abs().argmin()]['price']
+# h_intraday = session['price'].max()
+# l_intraday = session['price'].min()
 
-print("\nFrom df_stream between 9:30–16:00:")
-print(f"  Open:  {o_intraday}")
-print(f"  Close: {c_intraday}")
-print(f"  High:  {h_intraday}")
-print(f"  Low:   {l_intraday}")
+# print("\nFrom df_stream between 9:30–16:00:")
+# print(f"  Open:  {o_intraday}")
+# print(f"  Close: {c_intraday}")
+# print(f"  High:  {h_intraday}")
+# print(f"  Low:   {l_intraday}")
