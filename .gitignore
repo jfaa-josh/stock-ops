@@ -176,3 +176,8 @@ desktop.ini
 requirements*.bak
 *.yml.bak
 *.yaml.bak
+
+# ============================
+# Personal dev-machine scripts
+# ============================
+scripts/connect-hetzner.ps1
