@@ -70,6 +70,7 @@ See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-
    ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
    ```
    (Use `local` instead of `prod` to start the local nginx mode and self-signed `stockops.local` certs.)
+
    For host-managed nginx (recommended on IPv6-only hosts without Docker IPv6 NAT), use:
    ```bash
    PROXY_MODE=host ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
@@ -153,30 +154,30 @@ Running with project name `-p datapipe` is optional. The benefit, shown here, is
 
 #### Check status:
 ```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core ps
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml ps
 ```
 
 #### View logs (example: writer-service container):
 ```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core logs -f writer-service
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml logs -f writer-service
 ```
 
 #### Stop / Restart / Remove:
-Note: use the same `stockops.sh` wrapper and the same `-f` + `--profile` values you used for `up`, otherwise compose may not target the right stack (add `--profile datapipe-visualize-data` too if you started that profile).
+Note: use the same `stockops.sh` wrapper and the same `-f` + `--profile` values you used for `up`, otherwise compose may not target the right stack.
 
 *Stop (keep containers/data):*
 ```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core stop
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml stop
 ```
 
 *Restart:*
 ```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core restart
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml restart
 ```
 
 *Remove containers (preserve data):*
 ```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core down
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml down
 ```
 
 Note: On all `down` calls, do not postpend -v unless you intend to delete all storage volumes.
@@ -199,7 +200,7 @@ To copy database files to a local directory:
 1) cd to desired local directory (example: localdir)
 2) Copy files to localdir/data:
   ```bash
-  docker cp "$(./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core ps -q writer-service)":/app/data/raw ./data
+  docker cp "$(./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml ps -q writer-service)":/app/data/raw ./data
   ```
 
 Note: Container must be running.
