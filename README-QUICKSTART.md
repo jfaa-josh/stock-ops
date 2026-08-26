@@ -138,7 +138,7 @@ Start the main + visualization data-pipeline profile in detached mode:
 
 Additional container launches:
 
-- SQLite Browser service for viewing `.db` files located at `Computer/data/` — reachable through nginx when the optional `datapipe-visualize-data` profile is active:
+- SQLite Browser service for viewing `.db` files — mounted at `/data` inside the container, backed by the same `db_data` named volume the writer-service writes to (see [Data Persistence](#data-persistence)) — reachable through nginx when the optional `datapipe-visualize-data` profile is active:
   - Local: `https://stockops.local/sqlite/`
   - Production: `https://your.production.domain/sqlite/`
 
@@ -191,6 +191,8 @@ Named volumes survive a `down` call:
 - `redis_data` – Redis state & buffer
 
 Note: Check actual volume names with `docker volume ls`.
+
+Note: these are Docker-managed named volumes, not folders bind-mounted into this directory — nothing appears automatically on your host filesystem, in this directory or elsewhere. Use the SQLite Browser (above) to inspect `.db` files in place, or `docker cp` (below) to copy them out.
 
 #### Accessing Data Outside of Docker
 

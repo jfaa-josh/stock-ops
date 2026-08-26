@@ -56,7 +56,8 @@ server {
 
   location /sqlite/ {
     set $sqlite_backend "sqlitebrowser:3000";
-    proxy_pass http://$sqlite_backend/;
+    proxy_pass http://$sqlite_backend;  # No trailing slash: preserve the /sqlite/ prefix, since the
+                                         # container's own internal nginx now expects it (SUBFOLDER=/sqlite/)
   }
 
   location /cadvisor/ {

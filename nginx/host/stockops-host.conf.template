@@ -52,7 +52,8 @@ server {
   }
 
   location /sqlite/ {
-    proxy_pass http://127.0.0.1:3000/;
+    proxy_pass http://127.0.0.1:3000;  # No trailing slash: preserve the /sqlite/ prefix, since the
+                                        # container's own internal nginx now expects it (SUBFOLDER=/sqlite/)
   }
 
   location / {

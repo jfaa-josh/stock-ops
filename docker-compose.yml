@@ -11,8 +11,10 @@ x-common-envvars: &common-envvars
   PREFECT_DEFAULT_WORK_POOL_NAME: default             # Default work pool for Prefect tasks
 
 networks:
-  default:
-    enable_ipv6: true
+  edge:                                                # nginx + everything it proxies to (and prefect-server, reached
+    enable_ipv6: true                                  # directly by streamlit's api_backend.py, not only via nginx)
+  data:                                                # postgres/redis + the services that talk to them directly
+    {}
 
 services:
   ###BASELINE SERVICES ALWAYS ON >>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -38,6 +40,7 @@ services:
       POSTGRES_DB: prefect                            # Default database name
     volumes:
       - postgres_data:/var/lib/postgresql/data        # Persist data on host volume
+    networks: [data]                                  # Only prefect-server needs to reach this
     healthcheck:                                      # Check DB readiness
       test: ["CMD-SHELL", "pg_isready -U prefect"]    # Command to test if Postgres is ready
       interval: 5s                                    # Time between checks
@@ -49,6 +52,7 @@ services:
     image: redis:8                                    # Use Redis version 8 image
     volumes:
       - redis_data:/data                              # Persist Redis data on host volume
+    networks: [data]                                  # Consumers: prefect-server, prefect-serve, writer-service
     healthcheck:                                      # Check Redis readiness
       test: ["CMD-SHELL", "redis-cli ping"]           # Command to ping Redis
       interval: 5s                                    # Check every 5 seconds
@@ -72,6 +76,7 @@ services:
       - "80:80"                                       # Serve HTTP on host port 80
       - "443:443"                                     # Serve HTTPS on host port 443
     profiles: ["nginx-prod"]
+    networks: [edge]                                  # Reaches streamlit/prefect-server/sqlitebrowser/cadvisor here
     environment:
       NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-prod
     volumes:
@@ -102,6 +107,7 @@ services:
       - "80:80"
       - "443:443"
     profiles: ["nginx-local"]
+    networks: [edge]                                  # Reaches streamlit/prefect-server/sqlitebrowser/cadvisor here
     environment:
       NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-local
     volumes:
@@ -131,6 +137,7 @@ services:
         condition: service_completed_successfully
     user: "1000:1000"                                 # match sqlitebrowser’s PUID/PGID (avoiding access conflicts)
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
+    networks: [data]                                  # Only needs redis; not reachable by/reaching anything else
     environment:                                      # Define environment variables for the container
       <<: *common-envvars                             # Inherit common environment variables
       REDIS_URL: redis://redis:6379/1                 # Internal redis connex URL (host:port/db) (use DB1; prefect uses DB0)
@@ -164,6 +171,7 @@ services:
     image: prefect-server                             # Tag for the built image
     working_dir: /app                                 # Run all commands from /app
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
+    networks: [edge, data]                            # edge: reached by nginx/streamlit/prefect-serve; data: postgres+redis
     environment:                                      # Prefect configuration variables
       <<: *common-envvars                             # Inherit common environment variables
       # Connection string for Prefect → Postgres:
@@ -216,6 +224,7 @@ services:
       writer-service:
         condition: service_healthy                    # Wait until writer-service is healthy
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
+    networks: [data]                                  # Reaches redis (buffer producer) and prefect-server here
     environment:                                      # Prefect configuration variables
       <<: *common-envvars                             # Inherit common environment variables
       PREFECT_API_URL: http://prefect-server:4200/api  # API URL for the worker to pull jobs
@@ -248,6 +257,7 @@ services:
       prefect-serve:
         condition: service_healthy                    # Wait until Prefect server is ready
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
+    networks: [edge]                                  # Reached by nginx; reaches prefect-server directly here
     ports:
       - "127.0.0.1:8501:8501"
     environment:
@@ -270,6 +280,7 @@ services:
       init-db-permissions:                            # Ensure permissions to access files in db
         condition: service_completed_successfully
     profiles: ["datapipe-visualize-data"]             # Service only starts with `--profile datapipe-visualize-data`
+    networks: [edge]                                  # Reached by nginx; reads .db files via volume, not the network
     ports:
       - "127.0.0.1:3000:3000"
     environment:
@@ -277,6 +288,10 @@ services:
       - PGID=1000                                     # Host group ID (same reason as above)
       - UMASK=002                                     # Validate runtim umask for file permissions conformity
       - TZ=Etc/UTC                                    # Set container timezone (affects logs, timestamps in UI)
+      - SUBFOLDER=/sqlite/                             # Tells the Selkies frontend its own base path, so its
+                                                        # websocket URL is built as /sqlite/websockets, matching
+                                                        # nginx's /sqlite/ location block, instead of /websockets
+                                                        # at the root (which falls through to a different location)
     volumes:
       - sqlitebrowser_config:/config                  # Stores the app's own settings/config; persistent across restarts
       - db_data:/data                                 # Mount your named volume with SQLite .db files
@@ -288,6 +303,7 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: cadvisor
     profiles: ["nginx-prod"]
+    networks: [edge]                                  # Reached by nginx only
     ports:
       - "8080:8080"
     volumes:
