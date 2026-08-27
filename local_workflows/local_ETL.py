@@ -63,6 +63,9 @@ def test_local():
     # command_type = 'fetch_historical'
     # command = {'ticker': 'VOO', 'exchange': 'US', 'interval': 'd', 'start': '2024-10-25', 'end': '2024-11-04'}
     # command_type = 'fetch_historical'
+    # command_type = 'start_stream'
+    # command = {"stream_type": "trades", "tickers": 'SPY', 'exchange': 'US', "duration": 20}
+    # command = {"stream_type": "quotes", "tickers": 'SPY', 'exchange': 'US', "duration": 20}
 
     command_type="start_stream"
     command = {"stream_type": "quotes", "tickers": 'SPY', 'exchange': 'US', "duration": 20}
@@ -85,6 +88,10 @@ def test_ci():
         'fetch_historical', 'IBKR'),
         ({'ticker': 'VOO', 'exchange': 'US', 'interval': 'd', 'start': '2024-10-25', 'end': '2024-11-04'},
         'fetch_historical', 'IBKR'),
+        ({"stream_type": "trades", "tickers": 'SPY', 'exchange': 'US', "duration": 20},
+         "start_stream", 'IBKR'),
+        ({"stream_type": "quotes", "tickers": 'SPY', 'exchange': 'US', "duration": 20},
+         "start_stream", 'IBKR'),
     ]:
         controller_driver_flow(command, command_type, provider)
 

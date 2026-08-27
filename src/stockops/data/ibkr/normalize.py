@@ -47,3 +47,11 @@ def ibkr_daybar_to_isodate(value: date | datetime) -> str:
     if isinstance(value, datetime):
         value = value.date()
     return value.isoformat()
+
+
+def to_utc_epoch_ms(value: datetime) -> int:
+    """Normalize a streaming tick's timestamp (`TickByTickAllLast.time` / `TickByTickBidAsk.time`,
+    always a tz-aware `datetime`) to UTC epoch milliseconds. Second precision (`to_utc_epoch`)
+    isn't enough here -- multiple ticks can land within the same second."""
+    dt = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return int(dt.astimezone(UTC).timestamp() * 1000)

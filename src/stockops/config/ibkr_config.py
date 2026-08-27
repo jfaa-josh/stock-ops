@@ -43,6 +43,16 @@ IBKR_MARKET_DATA_TYPE = 1
 IBKR_USE_RTH_INTERDAY = True
 IBKR_USE_RTH_INTRADAY = False
 
+# Must match docker-compose.yml's ib-gateway AUTO_RESTART_TIME ("2:00 AM") / TIME_ZONE
+# (America/New_York) -- no way to derive one from the other automatically, so both sides carry
+# a comment pointing at this pairing. Used by ibkr_streaming_service.py's restart-boundary check
+# (Section 6.4): a stream run whose duration would cross this window fails fast instead of
+# silently losing its feed mid-run. The guard window absorbs the restart's own downtime plus
+# reconnect/resubscribe time, not just the instant of the restart itself.
+IBKR_GATEWAY_RESTART_LOCAL = "02:00"
+IBKR_GATEWAY_RESTART_TZ = "America/New_York"
+IBKR_GATEWAY_RESTART_GUARD_S = 300
+
 # Same top-level keys as eodhd_config.EXCHANGE_METADATA (embedded in DB filenames, must match exactly),
 # plus IBKR-only `exchange`/`primary_exchange` routing fields. Defined unconditionally — ProviderConfig
 # accesses this generically.

@@ -408,7 +408,7 @@ services:
       TWS_PASSWORD_PAPER: ${TWS_PASSWORD_PAPER:-}
       TWS_ACCEPT_INCOMING: accept
       TIME_ZONE: America/New_York                       # matches eodhd_config.EXCHANGE_METADATA["US"]["Timezone"]
-      AUTO_RESTART_TIME: "2:00 AM"                       # must match ibkr_config.py's restart config (later chunk) — Section 10.1
+      AUTO_RESTART_TIME: "2:00 AM"                       # must match ibkr_config.IBKR_GATEWAY_RESTART_LOCAL (Chunk 6) — Section 10.1
       READ_ONLY_API: "yes"                              # Gateway-level enforcement, both trading modes — Section 9.1
     # No host port publishing, no VNC_SERVER_PASSWORD — compose-network only.
     healthcheck:

@@ -1,7 +1,7 @@
 import logging
 
 from stockops.config import utils as cfg_utils  # , add additional providers here as needed
-from stockops.data.ibkr.normalize import ibkr_daybar_to_isodate, to_utc_epoch
+from stockops.data.ibkr.normalize import ibkr_daybar_to_isodate, to_utc_epoch, to_utc_epoch_ms
 from stockops.data.utils import validate_isodatestr, validate_utc_ts
 
 logger = logging.getLogger(__name__)
@@ -102,9 +102,9 @@ class TransformData:
         return transformed
 
     def ibkr(self, data_row: dict, interval: str) -> dict:
-        """Historical cases only -- streaming (trades/quotes) is Chunk 6. Volume is cast to int
-        (IBKR's is float) and `average`/`barCount` are kept as IBKR-only extra columns, matching
-        the field-mapping decisions in the strategy doc's "Decisions already made" table."""
+        """Volume/size fields are cast to int (IBKR's are float); historical bars keep
+        `average`/`barCount` as IBKR-only extra columns -- matching the field-mapping decisions
+        in the strategy doc's "Decisions already made" table."""
         if self.target == "to_db_writer":
             if self.data_type == "historical_interday":
                 required_keys = {"date", "open", "high", "low", "close", "adjusted_close", "volume"}
@@ -143,8 +143,37 @@ class TransformData:
                     "interval": interval,
                 }
 
-            elif self.data_type in ("streaming_trades", "streaming_quotes"):
-                raise NotImplementedError(f"IBKR {self.data_type} transform is not yet implemented (Chunk 6).")
+            elif self.data_type == "streaming_trades":
+                required_keys = {"time", "price", "size"}
+
+                missing = required_keys - data_row.keys()
+                if missing:
+                    raise ValueError(f"Missing expected fields in streaming_trades IBKR data: {missing}")
+
+                assert interval == "", "Interval invalid for spot data."
+
+                transformed = {
+                    "timestamp_UTC_ms": to_utc_epoch_ms(data_row["time"]),
+                    "price": data_row["price"],
+                    "volume": int(data_row["size"]),
+                }
+
+            elif self.data_type == "streaming_quotes":
+                required_keys = {"time", "bidPrice", "askPrice", "bidSize", "askSize"}
+
+                missing = required_keys - data_row.keys()
+                if missing:
+                    raise ValueError(f"Missing expected fields in streaming_quotes IBKR data: {missing}")
+
+                assert interval == "", "Interval invalid for spot data."
+
+                transformed = {
+                    "timestamp_UTC_ms": to_utc_epoch_ms(data_row["time"]),
+                    "ask_price": data_row["askPrice"],
+                    "bid_price": data_row["bidPrice"],
+                    "ask_size": int(data_row["askSize"]),
+                    "bid_size": int(data_row["bidSize"]),
+                }
 
             else:
                 raise ValueError(f"Unsupported data_type for IBKR transform: {self.data_type}")

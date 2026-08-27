@@ -5,7 +5,8 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Protocol
 
-from ib_async import IB, BarDataList, Contract, TagValue
+from eventkit import Event
+from ib_async import IB, BarDataList, Contract, TagValue, Ticker
 
 from stockops.config import ibkr_config
 
@@ -29,6 +30,10 @@ class IBKRClient(Protocol):
     def reqMarketDataType(self, marketDataType: int) -> None: ...
     def reqCurrentTimeAsync(self) -> Awaitable[datetime]: ...
     async def qualifyContractsAsync(self, *contracts: Contract) -> list[Contract | list[Contract | None] | None]: ...
+    def reqTickByTickData(
+        self, contract: Contract, tickType: str, numberOfTicks: int = 0, ignoreSize: bool = False
+    ) -> Ticker: ...
+    def cancelTickByTickData(self, contract: Contract, tickType: str) -> bool: ...
     async def reqHistoricalDataAsync(
         self,
         contract: Contract,
@@ -42,6 +47,9 @@ class IBKRClient(Protocol):
         chartOptions: list[TagValue] = [],  # noqa: B006 -- mirrors ib_async's real signature exactly (Protocol stub, never executed)
         timeout: float = 60,
     ) -> BarDataList: ...
+
+    errorEvent: Event
+    disconnectedEvent: Event
 
 
 def acquire_client_id(role: str) -> int:
