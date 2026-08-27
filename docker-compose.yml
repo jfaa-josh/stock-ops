@@ -412,7 +412,8 @@ services:
       READ_ONLY_API: "yes"                              # Gateway-level enforcement, both trading modes — Section 9.1
     # No host port publishing, no VNC_SERVER_PASSWORD — compose-network only.
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 4001 || nc -z localhost 4002 || exit 1"]   # mode-agnostic (loopback ports)
+      # nc isn't present in this image (confirmed directly) — bash's own /dev/tcp does the same check.
+      test: ["CMD-SHELL", "bash -c '(exec 3<>/dev/tcp/127.0.0.1/4001) 2>/dev/null || (exec 3<>/dev/tcp/127.0.0.1/4002) 2>/dev/null'"]
       interval: 30s
       start_period: 120s
     restart: unless-stopped

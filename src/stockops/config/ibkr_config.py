@@ -27,6 +27,15 @@ if IBKR_TRADING_MODE not in ("paper", "live"):
 # reachable from here.
 IBKR_PORT = 4003 if IBKR_TRADING_MODE == "live" else 4004
 
+# Static clientId ranges per connection role (stockops/ibkr/connection.py). "account" is unused until
+# Section 13's account/order work begins.
+IBKR_CLIENT_ID_HISTORICAL = 10
+IBKR_CLIENT_ID_STREAMING = 20
+IBKR_CLIENT_ID_ACCOUNT = 30
+
+# reqMarketDataType: 1=live, 3=delayed, 4=delayed-frozen.
+IBKR_MARKET_DATA_TYPE = 1
+
 # Same top-level keys as eodhd_config.EXCHANGE_METADATA (embedded in DB filenames, must match exactly),
 # plus IBKR-only `exchange`/`primary_exchange` routing fields. Defined unconditionally — ProviderConfig
 # accesses this generically.

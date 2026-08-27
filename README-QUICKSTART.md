@@ -104,13 +104,20 @@ The wrapper sets `PREFECT_UI_SERVE_BASE`, `PREFECT_UI_API_URL`, and `PYTHONPATH`
 Note: Your .env stays local and is never pushed to GitHub.
 
 #### Providers:
-StockOps is currently capable of interacting with the following providers:
-1) EODHD
+See [Running a provider](#3-launch-docker-compose-profiles) below for the currently available providers and how to select one.
 
 ### 3. Launch Docker Compose Profiles
 
 #### Running a provider (`--providers`):
-The core data pipeline only starts when you tell it which provider(s) to use, via `--providers` — a comma-separated list (no spaces after commas), e.g. `--providers eodhd`. Add `--profile datapipe-visualize-data` if you also want the DB browser. You never pass a raw `--profile datapipe-core` yourself; `--providers` turns it on automatically.
+A provider is a commercial service StockOps connects to for credentialed access to things like market datastreams and account/trading task execution. The core data pipeline only starts when you tell it which provider(s) to use, via `--providers` — a comma-separated list (no spaces after commas).
+
+| Flag | Provider | Notes |
+|---|---|---|
+| `eodhd` | EODHD | Historical and streaming market data. |
+| `ibkr_paper` | Interactive Brokers — paper account | Sandboxed/fake-money trading mode. Market data and streaming support is still in development. |
+| `ibkr_live` | Interactive Brokers — live account | Real trading account. Market data and streaming support is still in development. |
+
+Example selecting more than one at once: `--providers eodhd,ibkr_live`. Add `--profile datapipe-visualize-data` if you also want the DB browser. You never pass a raw `--profile datapipe-core` yourself; `--providers` turns it on automatically.
 
 ```bash
 ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd up -d
