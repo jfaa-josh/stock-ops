@@ -36,6 +36,13 @@ IBKR_CLIENT_ID_ACCOUNT = 30
 # reqMarketDataType: 1=live, 3=delayed, 4=delayed-frozen.
 IBKR_MARKET_DATA_TYPE = 1
 
+# useRTH split by data type, not one global default: EODHD's US intraday data includes pre-/
+# post-market trades (confirmed against EODHD's own API docs), while EODHD's EOD/interday data
+# reflects the standard regular-session official close. Matching both requires different
+# defaults per data type; both remain overridable later via a per-command field (Section 4).
+IBKR_USE_RTH_INTERDAY = True
+IBKR_USE_RTH_INTRADAY = False
+
 # Same top-level keys as eodhd_config.EXCHANGE_METADATA (embedded in DB filenames, must match exactly),
 # plus IBKR-only `exchange`/`primary_exchange` routing fields. Defined unconditionally — ProviderConfig
 # accesses this generically.

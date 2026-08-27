@@ -23,7 +23,7 @@ class ReadProcess:
 
     def read_sql(self, ticker: str, interval: str, start_date: str, end_date: str) -> list[dict]:
         """query sql database by date range, interval, and ticker; return raw data as list[dict]"""
-        if self.provider == "EODHD":
+        if self.provider in ("EODHD", "IBKR"):
             return self.read_eodhd(ticker, interval, start_date, end_date)
         raise ValueError(f"Unsupported provider: {self.provider}")
 
@@ -71,7 +71,7 @@ class ReadProcess:
 
     def get_df(self, data: list[dict]) -> pd.DataFrame:
         def set_index(df: pd.DataFrame) -> pd.DataFrame:
-            if self.provider == "EODHD":
+            if self.provider in ("EODHD", "IBKR"):
                 if self.data_type == "historical_interday":
                     df["date"] = pd.to_datetime(df[self.ts_col], format="%Y-%m-%d").dt.tz_localize(self.tz)
                 elif self.data_type == "historical_intraday":

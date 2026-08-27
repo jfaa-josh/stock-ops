@@ -19,6 +19,15 @@ def set_ts_col(provider: str, data_type: str) -> str:
             return "timestamp_UTC_ms"
         else:
             raise ValueError(f"Unsupported data type: {data_type}")
+    elif provider == "IBKR":
+        if data_type == "historical_interday":
+            return "date"
+        elif data_type == "historical_intraday":
+            return "timestamp_UTC_s"
+        elif data_type == "streaming":
+            return "timestamp_UTC_ms"
+        else:
+            raise ValueError(f"Unsupported data type: {data_type}")
     else:
         raise ValueError(f"Unknown provider: {provider}")
 

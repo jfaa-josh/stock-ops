@@ -2,10 +2,10 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator, Awaitable
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol
 
-from ib_async import IB
+from ib_async import IB, BarDataList, Contract, TagValue
 
 from stockops.config import ibkr_config
 
@@ -28,6 +28,20 @@ class IBKRClient(Protocol):
     def disconnect(self) -> str | None: ...
     def reqMarketDataType(self, marketDataType: int) -> None: ...
     def reqCurrentTimeAsync(self) -> Awaitable[datetime]: ...
+    async def qualifyContractsAsync(self, *contracts: Contract) -> list[Contract | list[Contract | None] | None]: ...
+    async def reqHistoricalDataAsync(
+        self,
+        contract: Contract,
+        endDateTime: datetime | date | str | None,
+        durationStr: str,
+        barSizeSetting: str,
+        whatToShow: str,
+        useRTH: bool,
+        formatDate: int = 1,
+        keepUpToDate: bool = False,
+        chartOptions: list[TagValue] = [],  # noqa: B006 -- mirrors ib_async's real signature exactly (Protocol stub, never executed)
+        timeout: float = 60,
+    ) -> BarDataList: ...
 
 
 def acquire_client_id(role: str) -> int:

@@ -1,7 +1,8 @@
-from stockops.config import eodhd_config  # , add additional providers here as needed
+from stockops.config import eodhd_config, ibkr_config  # , add additional providers here as needed
 
 _CONFIG_MAP = {  # , add additional providers here as needed
     "EODHD": eodhd_config,
+    "IBKR": ibkr_config,
 }
 
 

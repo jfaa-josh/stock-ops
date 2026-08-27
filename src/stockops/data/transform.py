@@ -1,6 +1,7 @@
 import logging
 
 from stockops.config import utils as cfg_utils  # , add additional providers here as needed
+from stockops.data.ibkr.normalize import ibkr_daybar_to_isodate, to_utc_epoch
 from stockops.data.utils import validate_isodatestr, validate_utc_ts
 
 logger = logging.getLogger(__name__)
@@ -18,12 +19,16 @@ class TransformData:
     def set_freqs(self):
         if self.provider == "EODHD":
             return {"d", "w", "m"}, {"1m", "5m", "1h"}
+        elif self.provider == "IBKR":
+            return {"d", "w", "m"}, {"1m", "5m", "1h"}
         raise ValueError(f"Unsupported provider: {self.provider}")
 
     def __call__(self, data_row: dict, interval: str = ""):
         """Note: dtypes selected for sql storage efficiency based on expected values"""
         if self.provider == "EODHD":
             return self.eodhd(data_row, interval)
+        elif self.provider == "IBKR":
+            return self.ibkr(data_row, interval)
         raise ValueError(f"Unsupported provider: {self.provider}")
 
     def eodhd(self, data_row: dict, interval: str) -> dict:
@@ -93,5 +98,55 @@ class TransformData:
                     "ask_size": data_row["as"],
                     "bid_size": data_row["bs"],
                 }
+
+        return transformed
+
+    def ibkr(self, data_row: dict, interval: str) -> dict:
+        """Historical cases only -- streaming (trades/quotes) is Chunk 6. Volume is cast to int
+        (IBKR's is float) and `average`/`barCount` are kept as IBKR-only extra columns, matching
+        the field-mapping decisions in the strategy doc's "Decisions already made" table."""
+        if self.target == "to_db_writer":
+            if self.data_type == "historical_interday":
+                required_keys = {"date", "open", "high", "low", "close", "adjusted_close", "volume"}
+                required_keys |= {"average", "barCount"}
+
+                missing = required_keys - data_row.keys()
+                if missing:
+                    raise ValueError(f"Missing expected fields in historical_interday IBKR data: {missing}")
+
+                assert interval in self.freq_interday, "Invalid interday interval for this provider."
+
+                transformed = {
+                    "date": ibkr_daybar_to_isodate(data_row["date"]),
+                    **{k: data_row[k] for k in ("open", "high", "low", "close", "adjusted_close")},
+                    "volume": int(data_row["volume"]),
+                    "average": data_row["average"],
+                    "barCount": data_row["barCount"],
+                    "interval": interval,
+                }
+
+            elif self.data_type == "historical_intraday":
+                required_keys = {"date", "open", "high", "low", "close", "volume", "average", "barCount"}
+
+                missing = required_keys - data_row.keys()
+                if missing:
+                    raise ValueError(f"Missing expected fields in historical_intraday IBKR data: {missing}")
+
+                assert interval in self.freq_intraday, "Invalid intraday interval for this provider."
+
+                transformed = {
+                    "timestamp_UTC_s": to_utc_epoch(data_row["date"]),
+                    **{k: data_row[k] for k in ("open", "high", "low", "close")},
+                    "volume": int(data_row["volume"]),
+                    "average": data_row["average"],
+                    "barCount": data_row["barCount"],
+                    "interval": interval,
+                }
+
+            elif self.data_type in ("streaming_trades", "streaming_quotes"):
+                raise NotImplementedError(f"IBKR {self.data_type} transform is not yet implemented (Chunk 6).")
+
+            else:
+                raise ValueError(f"Unsupported data_type for IBKR transform: {self.data_type}")
 
         return transformed

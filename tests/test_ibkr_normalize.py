@@ -1,5 +1,7 @@
 from datetime import UTC, date, datetime, timedelta, timezone
 
+import pytest
+
 from stockops.data.ibkr.normalize import ibkr_daybar_to_isodate, to_utc_epoch
 
 
@@ -35,9 +37,9 @@ def test_to_utc_epoch_from_iso_string():
     assert to_utc_epoch("2024-06-01T12:00:00+00:00") == int(datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC).timestamp())
 
 
-# def test_to_utc_epoch_rejects_unsupported_type():
-#     with pytest.raises(TypeError):
-#         to_utc_epoch(object())  # type: ignore[arg-type]
+def test_to_utc_epoch_rejects_unsupported_type():
+    with pytest.raises(TypeError):
+        to_utc_epoch(object())  # pyright: ignore[reportArgumentType]
 
 
 def test_ibkr_daybar_to_isodate_from_date():
