@@ -13,6 +13,9 @@ ENV PYTHONUNBUFFERED=1 \
     PREFECT_LOGGING_LEVEL=INFO \
     PREFECT_LOGGING_EXTRA_LOGGERS=stockops,websockets,asyncio
 
+# Whether to install ib_async. Set automatically by run/stockops.sh when --profile ibkr is used.
+ARG INSTALL_IBKR=false
+
 # Set working directory in image
 WORKDIR /app
 
@@ -27,5 +30,9 @@ COPY pyproject.toml ./
 COPY src/ ./src/
 COPY prefect/ ./prefect/
 
-# Install dependencies
-RUN pip install --no-cache-dir --editable .
+# Install dependencies (conditionally including the [ibkr] extra)
+RUN if [ "$INSTALL_IBKR" = "true" ]; then \
+      pip install --no-cache-dir --editable ".[ibkr]"; \
+    else \
+      pip install --no-cache-dir --editable .; \
+    fi

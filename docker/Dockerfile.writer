@@ -3,6 +3,10 @@
 ARG PYTHON_VERSION
 FROM python:${PYTHON_VERSION}-slim
 
+# Which pyproject.toml [project.optional-dependencies] group to install — "writer" by default;
+# reader-service (docker-compose.yml) overrides this to "reader" to get pandas instead of redis/numpy.
+ARG DEPS_GROUP=writer
+
 # Smaller installs from uv and no .pyc to reduce image size
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -20,11 +24,11 @@ WORKDIR /app
 COPY pyproject.toml ./
 
 # Copy the helper script
-COPY scripts/install_writer_deps.py ./scripts/install_writer_deps.py
+COPY scripts/install_extra_deps.py ./scripts/install_extra_deps.py
 
-# Install writer-only dependencies (script should call pip with no cache; env above enforces that)
+# Install this build's dependency group only (script calls pip with no cache; env above enforces that)
 RUN python -m pip install --upgrade pip && \
-    python scripts/install_writer_deps.py
+    python scripts/install_extra_deps.py "$DEPS_GROUP"
 
 # Copy the stockops subpackage bits
 COPY src/stockops/config/     ./src/stockops/config/

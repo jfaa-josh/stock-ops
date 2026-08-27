@@ -1,10 +1,5 @@
 name: stockops
 
-# Grab .env file for environment variables
-x-common-envfile: &common-envfile
-  env_file:
-    - ${ENV_FILE:-.env}
-
 # Anchor for the shared Prefect env vars
 x-common-envvars: &common-envvars
   ENV: production                                     # Set environment to production so you skip load_dotenv()
@@ -15,6 +10,8 @@ networks:
     enable_ipv6: true                                  # directly by streamlit's api_backend.py, not only via nginx)
   data:                                                # postgres/redis + the services that talk to them directly
     {}
+  ibkr_internal:                                       # ib-gateway + prefect-serve only — the TWS API has no auth
+    {}                                                 # of its own beyond clientId/readonly, so this stays isolated
 
 services:
   ###BASELINE SERVICES ALWAYS ON >>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -66,12 +63,12 @@ services:
       context: .
       dockerfile: docker/Dockerfile.nginx
     container_name: nginx                             # Fixed container name for easier docker ps grepping
-    <<: *common-envfile
     depends_on:
       certbot-init:
         condition: service_completed_successfully
       streamlit:
-        condition: service_started                    # Delay nginx until the Streamlit UI is ready
+        condition: service_started                    # delay nginx until Streamlit is ready, if it's running at all
+        required: false                                # streamlit only exists under datapipe-core — same fix as ib-gateway
     ports:
       - "80:80"                                       # Serve HTTP on host port 80
       - "443:443"                                     # Serve HTTPS on host port 443
@@ -79,6 +76,8 @@ services:
     networks: [edge]                                  # Reaches streamlit/prefect-server/sqlitebrowser/cadvisor here
     environment:
       NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-prod
+      PRODUCTION_DOMAIN: ${PRODUCTION_DOMAIN}          # Only var this service actually needs from .env (envsubst target)
+      NGINX_RELOAD_INTERVAL_SECONDS: ${NGINX_RELOAD_INTERVAL_SECONDS:-43200}  # Read by scripts/nginx-reload-loop.sh
     volumes:
       - certs_prod:/etc/letsencrypt:ro                   # TLS certs persisted in named volume
       - certs_www:/var/www/certbot:ro
@@ -103,6 +102,7 @@ services:
         condition: service_completed_successfully
       streamlit:
         condition: service_started
+        required: false                                # streamlit only exists under datapipe-core — same fix as ib-gateway
     ports:
       - "80:80"
       - "443:443"
@@ -123,7 +123,9 @@ services:
 
   ###DATA PIPELINE CORE SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
   writer-service:                                     # Defines the buffer & sqlite writer-service container
-    <<: *common-envfile                               # Load common .env file for environment variables
+    # No env_file here: writer-service needs nothing from .env (see strategy doc Section 9.3) —
+    # eodhd_config.EXCHANGE_METADATA is defined unconditionally, so the transitive import no longer
+    # needs EODHD_API_TOKEN to be present.
     build:                                            # Build a custom image ahead of runtime
       context: .                                      # └─ use this repo as build context
       dockerfile: docker/Dockerfile.writer            # └─ path to our optimized server Dockerfile
@@ -161,7 +163,8 @@ services:
     restart: unless-stopped
 
   prefect-server:                                     # Prefect API + services container
-    <<: *common-envfile                               # Load common .env file for environment variables
+    # No env_file here: no stockops source is even copied into this image (see docker/Dockerfile.prefect-server)
+    # — it's a bare `prefect server start`, so it needs nothing from .env (strategy doc Section 9.3).
     build:                                            # Build a custom image ahead of runtime
       context: .                                      # └─ use this repo as build context
       dockerfile: docker/Dockerfile.prefect-server    # └─ path to our optimized server Dockerfile
@@ -210,12 +213,12 @@ services:
     restart: unless-stopped
 
   prefect-serve:                                      # Prefect agent for local (no worker pool/no deployment)
-    <<: *common-envfile                               # Load common .env file for environment variables
     build:
       context: .                                      # Docker build context is repo root
       args:
         PYTHON_VERSION: ${PYTHON_VERSION}             # Pass Python version to Dockerfile
         PREFECT_VERSION: ${PREFECT_VERSION}           # Pass Prefect version to Dockerfile
+        INSTALL_IBKR: ${INSTALL_IBKR:-false}          # Gate the [ibkr] extra — see docker/Dockerfile.prefect-serve
       dockerfile: docker/Dockerfile.prefect-serve     # Custom Dockerfile for executing deployment free flows
     image: prefect-serve                              # Name of the built image
     depends_on:
@@ -223,10 +226,15 @@ services:
         condition: service_healthy                    # Wait until Prefect server is healthy
       writer-service:
         condition: service_healthy                    # Wait until writer-service is healthy
+      ib-gateway:
+        condition: service_healthy
+        required: false                                # required — else Compose hard-errors when ibkr profile is off
     profiles: ["datapipe-core"]                       # This service only starts with `--profile datapipe-core`
-    networks: [data]                                  # Reaches redis (buffer producer) and prefect-server here
+    networks: [data, ibkr_internal]                   # data: redis (buffer producer) + prefect-server; ibkr_internal: ib-gateway
     environment:                                      # Prefect configuration variables
       <<: *common-envvars                             # Inherit common environment variables
+      EODHD_API_TOKEN: ${EODHD_API_TOKEN}
+      IBKR_TRADING_MODE: ${IBKR_TRADING_MODE:-paper}   # ibkr_config.py derives IBKR_PORT from this
       PREFECT_API_URL: http://prefect-server:4200/api  # API URL for the worker to pull jobs
       REDIS_URL: redis://redis:6379/1                 # Access to Redis DB1 for writer-service connect
       BUFFER_STREAM: buf:ingest                       # Env for Redis stream used by writer-service
@@ -246,7 +254,8 @@ services:
     restart: unless-stopped
 
   streamlit:                                          # Streamlit UI container
-    <<: *common-envfile                               # Load common .env file for environment variables
+    # No env_file here: streamlit needs nothing from .env (strategy doc Section 9.3) — same
+    # EXCHANGE_METADATA fix as writer-service means EODHD_API_TOKEN isn't needed transitively either.
     build:
       context: .                                      # Build context is repo root
       args:
@@ -269,14 +278,36 @@ services:
     restart: unless-stopped
 
   ###DATA PIPELINE OPTIONAL SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
+  reader-service:                                     # Read-only access to already-stored .db files, independent of datapipe-core
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.writer            # same minimal image/source slice as writer-service, different deps group
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        DEPS_GROUP: reader                            # pandas, not writer's redis/numpy — see Dockerfile.writer
+    image: reader-service
+    depends_on:
+      init-db-permissions:
+        condition: service_completed_successfully
+    user: "1000:1000"                                 # match writer-service/sqlitebrowser's UID for volume permission consistency
+    profiles: ["reader"]                              # This service only starts with `--profile reader`
+    environment:
+      <<: *common-envvars
+      DB_DATA_DIR: /app/data
+    volumes:
+      - db_data:/app/data:ro                          # read-only — this container never writes
+    command: ["sleep", "infinity"]                    # idle; `docker compose exec reader-service python` for ad-hoc reads
+    restart: unless-stopped
+
   sqlitebrowser:
     # image: lscr.io/linuxserver/sqlitebrowser:latest   # LinuxServer.io's maintained image for DB Browser for SQLite
     image: docker.io/linuxserver/sqlitebrowser:version-3.13.1-r0
     attach: false                                     # Cuts out mindless logging chatter
     container_name: sqlitebrowser                     # Name shown in `docker ps` for easy reference
     depends_on:
-      writer-service:                                 # Don't start until writer-service reports healthy
+      writer-service:                                 # don't start until writer-service reports healthy, if it's running at all
         condition: service_healthy
+        required: false                                # writer-service only exists under datapipe-core — same fix as ib-gateway
       init-db-permissions:                            # Ensure permissions to access files in db
         condition: service_completed_successfully
     profiles: ["datapipe-visualize-data"]             # Service only starts with `--profile datapipe-visualize-data`
@@ -330,7 +361,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.certbot
     profiles: ["nginx-prod"]
-    <<: *common-envfile
+    environment:                                       # Only vars scripts/certbot-init.sh actually reads (Section 9.3)
+      PRODUCTION_DOMAIN: ${PRODUCTION_DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
     ports:
       - "80:80"
     volumes:
@@ -348,12 +381,40 @@ services:
     depends_on:
       nginx-prod:
         condition: service_started
-    <<: *common-envfile
+    environment:                                       # Only vars scripts/certbot-renew.sh actually reads (Section 9.3)
+      PRODUCTION_DOMAIN: ${PRODUCTION_DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
     volumes:
       - certs_prod:/etc/letsencrypt:rw
       - certs_www:/var/www/certbot:rw
     entrypoint: ["/bin/sh", "-c"]
     command: "/scripts/certbot-renew.sh"
+    restart: unless-stopped
+
+  ###IBKR SERVICES >>>>>>>>>>>>>>>>>>>>>>>>>>>
+  ib-gateway:                                          # gnzsnz/ib-gateway-docker: IB Gateway + IBC + socat
+    image: ghcr.io/gnzsnz/ib-gateway:stable             # TODO before real use: pin to a digest, not this tag
+    profiles: ["ibkr"]                                  # always combine with --profile datapipe-core (stockops.sh enforces this)
+    networks:
+      - ibkr_internal                                   # isolated on purpose — see the top-level networks: block
+    environment:
+      TRADING_MODE: ${IBKR_TRADING_MODE:-paper}         # container requires this literal name; value comes from our IBKR_TRADING_MODE
+      # TWS_USERID/TWS_PASSWORD are the ONLY pair the image reads, live or paper — it does not select
+      # _PAPER vs bare itself. stockops.sh re-exports whichever .env pair is active into these bare
+      # names before invoking Compose (Section 9.2/9.1) — do not assume the value here is always "live".
+      TWS_USERID: ${TWS_USERID:-}
+      TWS_PASSWORD: ${TWS_PASSWORD:-}
+      TWS_USERID_PAPER: ${TWS_USERID_PAPER:-}           # unused by the image itself (never used here)
+      TWS_PASSWORD_PAPER: ${TWS_PASSWORD_PAPER:-}
+      TWS_ACCEPT_INCOMING: accept
+      TIME_ZONE: America/New_York                       # matches eodhd_config.EXCHANGE_METADATA["US"]["Timezone"]
+      AUTO_RESTART_TIME: "2:00 AM"                       # must match ibkr_config.py's restart config (later chunk) — Section 10.1
+      READ_ONLY_API: "yes"                              # Gateway-level enforcement, both trading modes — Section 9.1
+    # No host port publishing, no VNC_SERVER_PASSWORD — compose-network only.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 4001 || nc -z localhost 4002 || exit 1"]   # mode-agnostic (loopback ports)
+      interval: 30s
+      start_period: 120s
     restart: unless-stopped
 
 volumes:                                              # Named Docker volumes for data persistence

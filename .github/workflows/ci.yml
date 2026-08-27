@@ -17,6 +17,14 @@ jobs:
       PYTHONPATH: src
       # Set optional tokens, if not exist, defaults to empty str
       EODHD_API_TOKEN: ${{ secrets.EODHD_API_TOKEN || '' }}
+      # Hardcoded literals, not from a secret/variable/input — CI must never be able to run IBKR in
+      # live mode, even if a future test starts exercising real Gateway connectivity (it doesn't
+      # today). Only ever add TWS_USERID_PAPER/TWS_PASSWORD_PAPER as repo secrets, never the live pair.
+      # Both names are pinned: IBKR_TRADING_MODE is what our own code (ibkr_config.py) reads;
+      # TRADING_MODE is the literal env var name ib-gateway's own image requires, in case a future
+      # workflow ever brings that container up directly via docker compose.
+      IBKR_TRADING_MODE: paper
+      TRADING_MODE: paper
       # Add additional token options here
 
     steps:

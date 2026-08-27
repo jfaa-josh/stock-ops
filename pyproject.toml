@@ -25,6 +25,12 @@ writer = [
   "redis",
   "numpy",
 ]
+reader = [
+  "pandas",
+]
+ibkr = [
+  "ib_async>=2.1,<3",
+]
 
 [dependency-groups]
 dev = [

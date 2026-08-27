@@ -10,7 +10,7 @@ It pulls pre-built, pinned images released to **GitHub Container Registry (GHCR)
 StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel concurrent realtime and historical data provider API call deployments.  Deployments are specified using a Streamlit user interface, and can be triggered immediately or scheduled.  Data extracted by concurrent streams is buffered, and then extracted by a single SQLite writer which transforms and stores the data in a docker volume database within `.db` files.
 
 ### Execution Summary
-- User creates `.env` from `.env.example` (or `default.env.example`) and fills in provider keys, and production domain and letsencrypt email (if deploying to production)
+- User creates `.env` from `.env.example` and fills in provider keys, and production domain and letsencrypt email (if deploying to production)
 - User sets `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` for automated TLS
 - Launch with `stockops.sh`, and set available provider in Streamlit UI
 - Streamlit UI sets historical or streaming data paradigms called "deployments"
@@ -52,12 +52,12 @@ Use `stockops.sh` to start the stack. It sets the correct nginx mode and Prefect
 For any hosting platform, ensure inbound TCP ports 80 (HTTP) and 443 (HTTPS) are open for your instance before you start.
 See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-cli-deployment) for an example production deployment ssh call sequence.
 1) Create an empty folder for deployment
-2) Download `docker-compose.vx.y.z.yml`, `stockops.sh`, and `.env.example` (or `default.env.example`) from the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
+2) Download `docker-compose.vx.y.z.yml`, `stockops.sh`, and `.env.example` from the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/releases) page
 3) Make the script executable:
    ```bash
    chmod +x stockops.sh
    ```
-4) Rename `.env.example` (or `default.env.example`) to `.env` and update placeholders ([see instructions](#2-configure-environment))
+4) Rename `.env.example` to `.env` and update placeholders ([see instructions](#2-configure-environment))
 5) If using `prod`, set `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` ([see instructions](#tls-certificates))
 6) If using `prod`, create the nginx basic-auth file:
    ```bash
@@ -67,13 +67,13 @@ See [Appendix: AWS Ubuntu + GitHub CLI deployment](#appendix-aws-ubuntu--github-
    Note: always start with `stockops.sh` (not raw `docker compose`) so preflight checks can catch missing/invalid auth file paths before containers start.
 7) Launch full production datapipeline stack in detached mode:
    ```bash
-   ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd --profile datapipe-visualize-data up -d
    ```
    (Use `local` instead of `prod` to start the local nginx mode and self-signed `stockops.local` certs.)
 
    For host-managed nginx (recommended on IPv6-only hosts without Docker IPv6 NAT), use:
    ```bash
-   PROXY_MODE=host ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   PROXY_MODE=host ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd --profile datapipe-visualize-data up -d
    ```
 8) Access the UI:
    - Local: `https://stockops.local/`
@@ -89,13 +89,13 @@ From the GitHub repository [releases](https://github.com/jfaa-josh/stock-ops/rel
 Example assets:
 - `docker-compose.v1.2.3.yml`
 - `stockops.sh`
-- `.env.example` (or `default.env.example`)
+- `.env.example`
 - `nginx/host/stockops-host.conf.template` (for host nginx in IPv6-only deployments)
 
 Place all files in the same directory. These files reference immutable image tags—no local build required.
 
 ### 2. Configure Environment
-Rename `.env.example` (or `default.env.example`) to `.env` in the same directory as the compose file, then update the placeholder values:
+Rename `.env.example` to `.env` in the same directory as the compose file, then update the placeholder values:
 
 `PRODUCTION_DOMAIN` is used by the `nginx-prod` mode to generate the `server_name` and certificate paths inside the baked prod nginx template, and certbot uses it to request and renew certificates under `/etc/letsencrypt/live/$PRODUCTION_DOMAIN` inside the production cert volume.
 `LETSENCRYPT_EMAIL` is required for certbot to issue the initial production certificate. Local mode can keep placeholder values.
@@ -109,11 +109,11 @@ StockOps is currently capable of interacting with the following providers:
 
 ### 3. Launch Docker Compose Profiles
 
-#### Core stack only (Docker profile: "datapipe-core"):
-To start the core data-pipeline profile only in detached mode:
+#### Running a provider (`--providers`):
+The core data pipeline only starts when you tell it which provider(s) to use, via `--providers` — a comma-separated list (no spaces after commas), e.g. `--providers eodhd`. Add `--profile datapipe-visualize-data` if you also want the DB browser. You never pass a raw `--profile datapipe-core` yourself; `--providers` turns it on automatically.
 
 ```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core up -d
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd up -d
 ```
 
 Important container launches (nginx now reverse-proxies the UI services on ports 80/443):
@@ -129,11 +129,11 @@ Important container launches (nginx now reverse-proxies the UI services on ports
 - Redis – cache/queue for prefect (DB0) and memory buffer for SQLite writer-service (DB1)
 - writer-service – Redis buffer monitoring, transform, batching, and SQLite writer
 
-#### Core stack with optional data browser (Docker profile: "datapipe-visualize-data"):
-Start the main + visualization data-pipeline profile in detached mode:
+#### Provider stack with the data browser (`--profile datapipe-visualize-data`):
+Add the optional DB browser alongside a provider in detached mode:
 
 ```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd --profile datapipe-visualize-data up -d
 ```
 
 Additional container launches:
@@ -141,6 +141,14 @@ Additional container launches:
 - SQLite Browser service for viewing `.db` files — mounted at `/data` inside the container, backed by the same `db_data` named volume the writer-service writes to (see [Data Persistence](#data-persistence)) — reachable through nginx when the optional `datapipe-visualize-data` profile is active:
   - Local: `https://stockops.local/sqlite/`
   - Production: `https://your.production.domain/sqlite/`
+
+#### Reading existing data without a provider (`--profile reader`):
+If you just want to read data already sitting in the `db_data` volume — no provider, no credentials, no core pipeline — use `--profile reader` instead. It starts a single idle container with read-only access to the stored `.db` files; combine with `--profile datapipe-visualize-data` if you also want the DB browser.
+
+```bash
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile reader up -d
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml exec reader-service python
+```
 
 ### 4. Additional Launch, Verify, and Access Details
 
@@ -163,7 +171,7 @@ Running with project name `-p datapipe` is optional. The benefit, shown here, is
 ```
 
 #### Stop / Restart / Remove:
-Note: use the same `stockops.sh` wrapper and the same `-f` + `--profile` values you used for `up`, otherwise compose may not target the right stack.
+Note: use the same `stockops.sh` wrapper and the same `-f` + `--providers`/`--profile` values you used for `up`, otherwise compose may not target the right stack.
 
 *Stop (keep containers/data):*
 ```bash
@@ -196,9 +204,15 @@ Note: these are Docker-managed named volumes, not folders bind-mounted into this
 
 #### Accessing Data Outside of Docker
 
-A reader class exists, but automated access points are future work.
+Use the `reader` profile (see [above](#3-launch-docker-compose-profiles)) to query the `.db` files in place via Python without copying anything out, e.g.:
+```bash
+./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml exec reader-service python
+```
+```python
+from stockops.data.database.reader import ReadProcess
+```
 
-To copy database files to a local directory:
+To copy database files to a local directory instead:
 1) cd to desired local directory (example: localdir)
 2) Copy files to localdir/data:
   ```bash
@@ -228,7 +242,7 @@ Some hosts cannot publish IPv6 ports through Docker due to missing kernel NAT ta
 Steps:
 1. Start the stack in host-proxy mode:
    ```bash
-   PROXY_MODE=host ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+   PROXY_MODE=host ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd --profile datapipe-visualize-data up -d
    ```
 2. Install nginx and certbot on the host.
 3. Use `nginx/host/stockops-host.conf.template` as the server block template and replace `${PRODUCTION_DOMAIN}`.
@@ -311,7 +325,7 @@ Use a real email you control for `LETSENCRYPT_EMAIL` (it receives expiration and
    - Reuse your existing .env (only update if release notes add variables).
 2. For minimal interruption of service that is currently running:
   ```bash
-  ./stockops.sh prod -p datapipe -f docker-compose.v1.3.0.yml --profile datapipe-core --profile datapipe-visualize-data up -d
+  ./stockops.sh prod -p datapipe -f docker-compose.v1.3.0.yml --providers eodhd --profile datapipe-visualize-data up -d
    ```
    - Docker compares the images deployed in the current run to those in the new compose version, updates as needed, and restarts any updated containers.  All named volumes—and therefore your data—are preserved.
 
@@ -349,7 +363,7 @@ export OWNER="jfaa-josh"
 export REPO="stock-ops"
 
 export COMPOSE_ASSET="docker-compose.${TAG}.yml"
-export ENV_ASSET="default.env.example"
+export ENV_ASSET=".env.example"
 export RUN_ASSET="stockops.sh"
 ```
 
@@ -417,10 +431,10 @@ sudo systemctl restart systemd-journald
 
 ```bash
 chmod +x "$RUN_ASSET"
-./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core up -d
+./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --providers eodhd up -d
 ```
 
-If your VM has limited resources, recommend starting with `datapipe-core` only (without `datapipe-visualize-data`).
+If your VM has limited resources, recommend starting with just a provider (without also adding `--profile datapipe-visualize-data`).
 
 ### 12) Production login
 
@@ -461,7 +475,7 @@ export OWNER="jfaa-josh"
 export REPO="stock-ops"
 
 export COMPOSE_ASSET="docker-compose.${TAG}.yml"
-export ENV_ASSET="default.env.example"
+export ENV_ASSET=".env.example"
 export RUN_ASSET="stockops.sh"
 export HOST_NGINX_ASSET="stockops-host.conf.template"
 ```
@@ -568,7 +582,7 @@ sudo systemctl reload nginx
 
 ```bash
 chmod +x "$RUN_ASSET"
-PROXY_MODE=host ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --profile datapipe-core up -d
+PROXY_MODE=host ./"$RUN_ASSET" prod -p datapipe -f "$COMPOSE_ASSET" --providers eodhd up -d
 ```
 
 ### 11) Production login

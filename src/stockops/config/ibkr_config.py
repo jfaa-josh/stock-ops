@@ -14,7 +14,32 @@ if os.getenv("ENV") != "production":
     dotenv_path = ROOT_DIR / ".env"
     load_dotenv(dotenv_path, override=False)
 
-# Placeholder only — IBKR connectivity is not yet implemented.
-IBKR_API_TOKEN = os.getenv("IBKR_API_TOKEN") or None
-if not IBKR_API_TOKEN:
-    logger.info("IBKR_API_TOKEN not set. Check .env or GitHub Secrets if it was intended.")
+# Compose service name for the ib-gateway container.
+IBKR_HOST = "ib-gateway"
+
+# Set by run/stockops.sh's --providers flag (ibkr_paper/ibkr_live), not .env. ib-gateway itself
+# requires the bare name "TRADING_MODE" — docker-compose.yml translates one to the other.
+IBKR_TRADING_MODE = os.getenv("IBKR_TRADING_MODE", "paper")
+if IBKR_TRADING_MODE not in ("paper", "live"):
+    raise ValueError(f"Unsupported IBKR_TRADING_MODE: {IBKR_TRADING_MODE!r}; expected 'paper' or 'live'")
+
+# 4001/4002 are loopback-only inside the ib-gateway container; 4003/4004 are the socat-relayed ports
+# reachable from here.
+IBKR_PORT = 4003 if IBKR_TRADING_MODE == "live" else 4004
+
+# Same top-level keys as eodhd_config.EXCHANGE_METADATA (embedded in DB filenames, must match exactly),
+# plus IBKR-only `exchange`/`primary_exchange` routing fields. Defined unconditionally — ProviderConfig
+# accesses this generically.
+EXCHANGE_METADATA = {
+    "US": {
+        "Timezone": "America/New_York",
+        "Currency": "USD",
+        "TradingHours": {
+            "Open": "09:30:00",
+            "Close": "16:00:00",
+            "WorkingDays": "Mon,Tue,Wed,Thu,Fri",
+        },
+        "exchange": "SMART",
+        "primary_exchange": "NASDAQ",
+    }
+}

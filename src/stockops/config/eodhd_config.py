@@ -15,18 +15,23 @@ if os.getenv("ENV") != "production":
     load_dotenv(dotenv_path, override=False)
 
 EODHD_API_TOKEN = os.getenv("EODHD_API_TOKEN") or None
-if EODHD_API_TOKEN:
-    # Exchange metadata
-    EXCHANGE_METADATA = {
-        "US": {
-            "Timezone": "America/New_York",
-            "Currency": "USD",
-            "TradingHours": {
-                "Open": "09:30:00",
-                "Close": "16:00:00",
-                "WorkingDays": "Mon,Tue,Wed,Thu,Fri",
-            },
-        }
-    }
-else:
+_EODHD_TOKEN_PLACEHOLDER = "__PUT_YOUR_TOKEN_HERE__"  # must match .env.example
+if not EODHD_API_TOKEN:
     logger.info("EODHD_API_TOKEN not set. Check .env or GitHub Secrets if it was intended.")
+elif EODHD_API_TOKEN == _EODHD_TOKEN_PLACEHOLDER:
+    # Warning, not an exception: this module must stay importable with no real token (writer-service,
+    # streamlit only need EXCHANGE_METADATA). run/stockops.sh does the hard fail-fast check instead.
+    logger.warning("EODHD_API_TOKEN is still the .env.example placeholder, not a real token.")
+
+# Defined unconditionally so ProviderConfig can always access it, even with no token set.
+EXCHANGE_METADATA = {
+    "US": {
+        "Timezone": "America/New_York",
+        "Currency": "USD",
+        "TradingHours": {
+            "Open": "09:30:00",
+            "Close": "16:00:00",
+            "WorkingDays": "Mon,Tue,Wed,Thu,Fri",
+        },
+    }
+}
