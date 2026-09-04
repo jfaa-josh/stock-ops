@@ -7,17 +7,22 @@ It pulls pre-built, pinned images released to **GitHub Container Registry (GHCR)
 
 ## Overview
 
-StockOps is a stock data pipeline orchestrator. StockOps facilitates parallel concurrent realtime and historical data provider API call deployments.  Deployments are specified using a Streamlit user interface, and can be triggered immediately or scheduled.  Data extracted by concurrent streams is buffered, and then extracted by a single SQLite writer which transforms and stores the data in a docker volume database within `.db` files.
+StockOps is a market data, trade execution, and strategy suite. Feature areas are configured through a shared Streamlit UI and orchestrated by Prefect, and their work can be triggered immediately or scheduled.
+
+### Feature Areas
+
+- **Data Pipeline** — concurrent real-time and historical market-data ingestion from multiple providers, buffered and written to SQLite. The only feature area implemented today. See [README-DATAPIPELINE.md](README-DATAPIPELINE.md).
+- **Account / Trade Execution** — account queries, position/balance tracking, and order placement. Not yet implemented. See [README-TRADE-EXECUTION.md](README-TRADE-EXECUTION.md).
+- **Models** — predictive/quantitative models consumed by strategies. Not yet implemented. See [README-MODELS.md](README-MODELS.md).
+- **Strategies** — strategy definition, backtesting, and live signal generation. Not yet implemented. See [README-STRATEGIES.md](README-STRATEGIES.md).
 
 ### Execution Summary
 - User creates `.env` from `.env.example` and fills in provider keys, and production domain and letsencrypt email (if deploying to production)
 - User sets `PRODUCTION_DOMAIN` and `LETSENCRYPT_EMAIL` for automated TLS
-- Launch with `stockops.sh`, and set available provider in Streamlit UI
-- Streamlit UI sets historical or streaming data paradigms called "deployments"
-- Prefect flow runs (executions of deployments) are either triggered (live) or scheduled by user via Streamlit UI
-- Prefect orchestrates concurrent flow run executions
-- Concurrent flow runs send API calls to provider, then transform returned data and set to Redis buffer DB1.  Multiple flow runs can write concurrently to the single buffer.
-- Writer-service monitors and drains Redis buffer, sorting data into batches of common database file and table (ticker), and sends batches to be written to .db files contained within the `db_data` Docker storage volume.
+- Launch with `stockops.sh`, then configure and trigger/schedule work for each active feature area from the Streamlit UI
+- Prefect orchestrates concurrent flow run executions across feature areas
+
+See each feature area's own guide (linked above) for how its deployments/flows work internally.
 
 ---
 
@@ -104,59 +109,14 @@ The wrapper sets `PREFECT_UI_SERVE_BASE`, `PREFECT_UI_API_URL`, and `PYTHONPATH`
 Note: Your .env stays local and is never pushed to GitHub.
 
 #### Providers:
-See [Running a provider](#3-launch-docker-compose-profiles) below for the currently available providers and how to select one.
+Providers are part of the data pipeline feature area — see [README-DATAPIPELINE.md](README-DATAPIPELINE.md) for the currently available providers and how to select one.
 
-### 3. Launch Docker Compose Profiles
+### 3. Launch a Feature Area
 
-#### Running a provider (`--providers`):
-A provider is a commercial service StockOps connects to for credentialed access to things like market datastreams and account/trading task execution. The core data pipeline only starts when you tell it which provider(s) to use, via `--providers` — a comma-separated list (no spaces after commas).
-
-| Flag | Provider | Notes |
-|---|---|---|
-| `eodhd` | EODHD | Historical and streaming market data. |
-| `ibkr_paper` | Interactive Brokers — paper account | Historical and streaming market data. Sandboxed/fake-money trading mode. |
-| `ibkr_live` | Interactive Brokers — live account | Historical and streaming market data. Real trading account. |
-
-Example selecting more than one at once: `--providers eodhd,ibkr_live`. Add `--profile datapipe-visualize-data` if you also want the DB browser. You never pass a raw `--profile datapipe-core` yourself; `--providers` turns it on automatically.
-
-The Streamlit UI only shows a provider's section if that provider was included in `--providers` when the stack was started — e.g. start with `--providers eodhd` and only the EODHD section appears; add `ibkr_paper`/`ibkr_live` to also see IBKR's. When IBKR is active, the UI also shows a read-only label indicating whether it's running in paper or live mode.
+Each feature area's own guide covers its `stockops.sh` launch flags, containers, and profiles. For the data pipeline — the only feature area implemented today — see [README-DATAPIPELINE.md](README-DATAPIPELINE.md).
 
 ```bash
 ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd up -d
-```
-
-Important container launches (nginx now reverse-proxies the UI services on ports 80/443):
-
-- Streamlit UI — reachable through nginx:
-  - Local: `https://stockops.local/`
-  - Production: `https://your.production.domain/`
-- Prefect-server orchestrator — reachable through nginx:
-  - Local: `https://stockops.local/prefect/`
-  - Production: `https://your.production.domain/prefect/`
-- Prefect-serve – Prefect worker pool
-- PostgreSQL – metadata DB for Prefect
-- Redis – cache/queue for prefect (DB0) and memory buffer for SQLite writer-service (DB1)
-- writer-service – Redis buffer monitoring, transform, batching, and SQLite writer
-
-#### Provider stack with the data browser (`--profile datapipe-visualize-data`):
-Add the optional DB browser alongside a provider in detached mode:
-
-```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd --profile datapipe-visualize-data up -d
-```
-
-Additional container launches:
-
-- SQLite Browser service for viewing `.db` files — mounted at `/data` inside the container, backed by the same `db_data` named volume the writer-service writes to (see [Data Persistence](#data-persistence)) — reachable through nginx when the optional `datapipe-visualize-data` profile is active:
-  - Local: `https://stockops.local/sqlite/`
-  - Production: `https://your.production.domain/sqlite/`
-
-#### Reading existing data without a provider (`--profile reader`):
-If you just want to read data already sitting in the `db_data` volume — no provider, no credentials, no core pipeline — use `--profile reader` instead. It starts a single idle container with read-only access to the stored `.db` files; combine with `--profile datapipe-visualize-data` if you also want the DB browser.
-
-```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --profile reader up -d
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml exec reader-service python
 ```
 
 ### 4. Additional Launch, Verify, and Access Details
@@ -209,26 +169,11 @@ Named volumes survive a `down` call:
 
 Note: Check actual volume names with `docker volume ls`.
 
-Note: these are Docker-managed named volumes, not folders bind-mounted into this directory — nothing appears automatically on your host filesystem, in this directory or elsewhere. Use the SQLite Browser (above) to inspect `.db` files in place, or `docker cp` (below) to copy them out.
+Note: these are Docker-managed named volumes, not folders bind-mounted into this directory — nothing appears automatically on your host filesystem, in this directory or elsewhere. See [README-DATAPIPELINE.md](README-DATAPIPELINE.md) for the SQLite Browser (to inspect `.db` files in place) or `docker cp` (to copy them out).
 
 #### Accessing Data Outside of Docker
 
-Use the `reader` profile (see [above](#3-launch-docker-compose-profiles)) to query the `.db` files in place via Python without copying anything out, e.g.:
-```bash
-./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml exec reader-service python
-```
-```python
-from stockops.data.database.reader import ReadProcess
-```
-
-To copy database files to a local directory instead:
-1) cd to desired local directory (example: localdir)
-2) Copy files to localdir/data:
-  ```bash
-  docker cp "$(./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml ps -q writer-service)":/app/data/raw ./data
-  ```
-
-Note: Container must be running.
+See [README-DATAPIPELINE.md](README-DATAPIPELINE.md) for reading stored data without a provider running (the `reader` profile), or copying `.db` files to a local directory.
 
 ### Routing UI traffic through nginx
 
