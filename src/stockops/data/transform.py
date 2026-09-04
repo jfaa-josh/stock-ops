@@ -6,6 +6,11 @@ from stockops.data.utils import validate_isodatestr, validate_utc_ts
 
 logger = logging.getLogger(__name__)
 
+_FREQS_BY_PROVIDER = {
+    "EODHD": ({"d", "w", "m"}, {"1m", "5m", "1h"}),
+    "IBKR": ({"d", "w", "m"}, {"1m", "5m", "1h"}),
+}
+
 
 class TransformData:
     def __init__(self, provider: str, data_type: str, target: str, exchange: str = "US"):
@@ -17,19 +22,19 @@ class TransformData:
         self.freq_interday, self.freq_intraday = self.set_freqs()
 
     def set_freqs(self):
-        if self.provider == "EODHD":
-            return {"d", "w", "m"}, {"1m", "5m", "1h"}
-        elif self.provider == "IBKR":
-            return {"d", "w", "m"}, {"1m", "5m", "1h"}
-        raise ValueError(f"Unsupported provider: {self.provider}")
+        try:
+            return _FREQS_BY_PROVIDER[self.provider]
+        except KeyError:
+            raise ValueError(f"Unsupported provider: {self.provider}") from None
 
     def __call__(self, data_row: dict, interval: str = ""):
         """Note: dtypes selected for sql storage efficiency based on expected values"""
-        if self.provider == "EODHD":
-            return self.eodhd(data_row, interval)
-        elif self.provider == "IBKR":
-            return self.ibkr(data_row, interval)
-        raise ValueError(f"Unsupported provider: {self.provider}")
+        dispatch = {"EODHD": self.eodhd, "IBKR": self.ibkr}
+        try:
+            handler = dispatch[self.provider]
+        except KeyError:
+            raise ValueError(f"Unsupported provider: {self.provider}") from None
+        return handler(data_row, interval)
 
     def eodhd(self, data_row: dict, interval: str) -> dict:
         if self.target == "to_db_writer":

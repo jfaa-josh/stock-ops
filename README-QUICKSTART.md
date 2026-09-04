@@ -114,10 +114,12 @@ A provider is a commercial service StockOps connects to for credentialed access 
 | Flag | Provider | Notes |
 |---|---|---|
 | `eodhd` | EODHD | Historical and streaming market data. |
-| `ibkr_paper` | Interactive Brokers — paper account | Sandboxed/fake-money trading mode. Market data and streaming support is still in development. |
-| `ibkr_live` | Interactive Brokers — live account | Real trading account. Market data and streaming support is still in development. |
+| `ibkr_paper` | Interactive Brokers — paper account | Historical and streaming market data. Sandboxed/fake-money trading mode. |
+| `ibkr_live` | Interactive Brokers — live account | Historical and streaming market data. Real trading account. |
 
 Example selecting more than one at once: `--providers eodhd,ibkr_live`. Add `--profile datapipe-visualize-data` if you also want the DB browser. You never pass a raw `--profile datapipe-core` yourself; `--providers` turns it on automatically.
+
+The Streamlit UI only shows a provider's section if that provider was included in `--providers` when the stack was started — e.g. start with `--providers eodhd` and only the EODHD section appears; add `ibkr_paper`/`ibkr_live` to also see IBKR's. When IBKR is active, the UI also shows a read-only label indicating whether it's running in paper or live mode.
 
 ```bash
 ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd up -d

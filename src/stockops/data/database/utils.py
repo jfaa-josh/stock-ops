@@ -9,27 +9,29 @@ MON2NUM = {m: i for i, m in enumerate(_MONTHS) if i > 0}
 NUM2MON = {i: m for i, m in enumerate(_MONTHS) if i > 0}
 
 
+_TS_COL_BY_PROVIDER = {
+    "EODHD": {
+        "historical_interday": "date",
+        "historical_intraday": "timestamp_UTC_s",
+        "streaming": "timestamp_UTC_ms",
+    },
+    "IBKR": {
+        "historical_interday": "date",
+        "historical_intraday": "timestamp_UTC_s",
+        "streaming": "timestamp_UTC_ms",
+    },
+}
+
+
 def set_ts_col(provider: str, data_type: str) -> str:
-    if provider == "EODHD":
-        if data_type == "historical_interday":
-            return "date"
-        elif data_type == "historical_intraday":
-            return "timestamp_UTC_s"
-        elif data_type == "streaming":
-            return "timestamp_UTC_ms"
-        else:
-            raise ValueError(f"Unsupported data type: {data_type}")
-    elif provider == "IBKR":
-        if data_type == "historical_interday":
-            return "date"
-        elif data_type == "historical_intraday":
-            return "timestamp_UTC_s"
-        elif data_type == "streaming":
-            return "timestamp_UTC_ms"
-        else:
-            raise ValueError(f"Unsupported data type: {data_type}")
-    else:
-        raise ValueError(f"Unknown provider: {provider}")
+    try:
+        provider_map = _TS_COL_BY_PROVIDER[provider]
+    except KeyError:
+        raise ValueError(f"Unknown provider: {provider}") from None
+    try:
+        return provider_map[data_type]
+    except KeyError:
+        raise ValueError(f"Unsupported data type: {data_type}") from None
 
 
 def period_from_unix(

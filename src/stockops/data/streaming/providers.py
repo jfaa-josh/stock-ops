@@ -2,12 +2,14 @@ from .eodhd_streaming_service import EODHDStreamingService
 from .ibkr_streaming_service import IBKRStreamingService
 
 # Later: add additional streaming services here as needed
+_STREAMING_SERVICES = {
+    "EODHD": EODHDStreamingService,
+    "IBKR": IBKRStreamingService,
+}
 
 
 def get_streaming_service(provider: str):
-    if provider == "EODHD":
-        return EODHDStreamingService()
-    elif provider == "IBKR":
-        return IBKRStreamingService()
-    else:
-        raise ValueError(f"Unknown streaming provider: {provider}")
+    try:
+        return _STREAMING_SERVICES[provider]()
+    except KeyError:
+        raise ValueError(f"Unknown streaming provider: {provider}") from None
