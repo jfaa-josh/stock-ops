@@ -11,10 +11,10 @@ StockOps is a market data, trade execution, and strategy suite. Feature areas ar
 
 ### Feature Areas
 
-- **Data Pipeline** — concurrent real-time and historical market-data ingestion from multiple providers, buffered and written to SQLite. The only feature area implemented today. See [README-DATAPIPELINE.md](README-DATAPIPELINE.md).
-- **Account / Trade Execution** — account queries, position/balance tracking, and order placement. Not yet implemented. See [README-TRADE-EXECUTION.md](README-TRADE-EXECUTION.md).
-- **Models** — predictive/quantitative models consumed by strategies. Not yet implemented. See [README-MODELS.md](README-MODELS.md).
-- **Strategies** — strategy definition, backtesting, and live signal generation. Not yet implemented. See [README-STRATEGIES.md](README-STRATEGIES.md).
+- **Data Pipeline** — concurrent real-time and historical market-data ingestion from multiple providers, buffered and written to SQLite. See [README-DATAPIPELINE.md](README-DATAPIPELINE.md).
+- **Account / Trade Execution** — account queries, position/balance tracking, and order placement. See [README-TRADE-EXECUTION.md](README-TRADE-EXECUTION.md).
+- **Models** — predictive/quantitative models consumed by strategies. See [README-MODELS.md](README-MODELS.md).
+- **Strategies** — strategy definition, backtesting, and live signal generation. See [README-STRATEGIES.md](README-STRATEGIES.md).
 
 ### Execution Summary
 - User creates `.env` from `.env.example` and fills in provider keys, and production domain and letsencrypt email (if deploying to production)
@@ -113,11 +113,22 @@ Providers are part of the data pipeline feature area — see [README-DATAPIPELIN
 
 ### 3. Launch a Feature Area
 
-Each feature area's own guide covers its `stockops.sh` launch flags, containers, and profiles. For the data pipeline — the only feature area implemented today — see [README-DATAPIPELINE.md](README-DATAPIPELINE.md).
+| Feature | Description | Guide |
+|---|---|---|
+| Data Pipeline | ETL pipeline for streaming and historical stock price data, storage in a SQL database, and tools for reading this database. | [README-DATAPIPELINE.md](README-DATAPIPELINE.md) |
 
+Each feature area's own guide covers its `stockops.sh` launch flags, containers, and profiles in full — see the table above for the current list.
+
+Feature areas are turned on via `--providers`/`--profile` flags, and these are stackable: multiple providers and profiles can be combined in a single call (e.g. two data providers plus the DB browser at once), and future feature areas are expected to combine the same way.
+
+Example — this launches the Data Pipeline feature area configured to use the EODHD provider:
 ```bash
 ./stockops.sh prod -p datapipe -f docker-compose.vx.y.z.yml --providers eodhd up -d
 ```
+See [README-DATAPIPELINE.md](README-DATAPIPELINE.md) for this feature area's full set of provider/profile flags.
+
+#### Project name (`-p`)
+`-p <name>` is Docker Compose's own project-name flag — an arbitrary label grouping this run's containers, networks, and volumes together, independent of which feature areas or providers are active. It is not itself a feature selector: the example above uses `datapipe` purely as a clear, conventional label matching the feature area in use, not because `-p` activates it — that's what `--providers`/`--profile` do. Setting one is optional but recommended: it makes status/logs/stop/restart simpler to target and helps avoid accidentally missing containers grouped within a profile.
 
 ### 4. Additional Launch, Verify, and Access Details
 
@@ -125,9 +136,6 @@ Each feature area's own guide covers its `stockops.sh` launch flags, containers,
 Running the wrapper with `-d` launches services in detached mode (background). Detached mode is ideal for long running service, where terminal closure will not interrupt service. Run without detached mode for short term debugging or for immediate access to streaming front-end container logs.
 
 Note: regardless of detached mode, logs and other information is available for each container or volume in Docker Desktop if installed.
-
-#### Project name (-p):
-Running with project name `-p datapipe` is optional. The benefit, shown here, is that containers set by profiles in the compose up command are set to the project name, which makes it simpler to perform other tasks and easier to avoid accidentally omitting containers grouped within a profile.
 
 #### Check status:
 ```bash
@@ -158,22 +166,6 @@ Note: use the same `stockops.sh` wrapper and the same `-f` + `--providers`/`--pr
 ```
 
 Note: On all `down` calls, do not postpend -v unless you intend to delete all storage volumes.
-
-#### Data Persistence
-
-Named volumes survive a `down` call:
-
-- `db_data` – SQLite databases
-- `postgres_data` – PostgreSQL metadata
-- `redis_data` – Redis state & buffer
-
-Note: Check actual volume names with `docker volume ls`.
-
-Note: these are Docker-managed named volumes, not folders bind-mounted into this directory — nothing appears automatically on your host filesystem, in this directory or elsewhere. See [README-DATAPIPELINE.md](README-DATAPIPELINE.md) for the SQLite Browser (to inspect `.db` files in place) or `docker cp` (to copy them out).
-
-#### Accessing Data Outside of Docker
-
-See [README-DATAPIPELINE.md](README-DATAPIPELINE.md) for reading stored data without a provider running (the `reader` profile), or copying `.db` files to a local directory.
 
 ### Routing UI traffic through nginx
 

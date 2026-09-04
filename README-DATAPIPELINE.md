@@ -73,6 +73,20 @@ If you just want to read data already sitting in the `db_data` volume — no pro
 
 ---
 
+## Data Persistence
+
+Named volumes survive a `down` call:
+
+- `db_data` – SQLite databases
+- `postgres_data` – PostgreSQL metadata
+- `redis_data` – Redis state & buffer
+
+Note: Check actual volume names with `docker volume ls`.
+
+Note: these are Docker-managed named volumes, not folders bind-mounted into this directory — nothing appears automatically on your host filesystem, in this directory or elsewhere. Use the SQLite Browser (above) to inspect `.db` files in place, or `docker cp` (below) to copy them out.
+
+---
+
 ## Accessing Data Outside of Docker
 
 Use the `reader` profile (above) to query the `.db` files in place via Python without copying anything out, e.g.:
