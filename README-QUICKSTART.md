@@ -113,9 +113,9 @@ Providers are part of the data pipeline feature area — see [README-DATAPIPELIN
 
 ### 3. Launch a Feature Area
 
-| Feature | Description | Guide |
-|---|---|---|
-| Data Pipeline | ETL pipeline for streaming and historical stock price data, storage in a SQL database, and tools for reading this database. | [README-DATAPIPELINE.md](README-DATAPIPELINE.md) |
+| Feature (`-p`) | Description                                                                                                                  | Guide                                             |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
+| `datapipe`      | ETL pipeline for streaming and historical stock price data, storage in a SQL database, and tools for reading this database. | [README-DATAPIPELINE.md](README-DATAPIPELINE.md) |
 
 Each feature area's own guide covers its `stockops.sh` launch flags, containers, and profiles in full — see the table above for the current list.
 
