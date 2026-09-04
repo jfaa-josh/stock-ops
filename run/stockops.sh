@@ -209,6 +209,15 @@ if [ -f ".env" ]; then
   is_real_value TWS_USERID "__PUT_YOUR_LIVE_IBKR_USERNAME_HERE__" && is_real_value TWS_PASSWORD "__PUT_YOUR_LIVE_IBKR_PASSWORD_HERE__" && IBKR_LIVE_AVAILABLE=true
 fi
 
+# Whether each provider is actually active *in this invocation* (not just credentialed in .env) —
+# what the Streamlit UI (Chunk 7) gates section visibility on, since showing a provider's controls
+# when its backend isn't actually running/built invites a confusing failure at trigger time instead
+# of a clear "not available" state at the point of choice.
+EODHD_UI_AVAILABLE=false
+IBKR_UI_AVAILABLE=false
+[ "$WANT_EODHD" = "1" ] && EODHD_UI_AVAILABLE=true
+[ "$HAS_IBKR_PROFILE" = "1" ] && IBKR_UI_AVAILABLE=true
+
 rm -f .env.runtime.*
 
 PROD_HTPASSWD_PATH="./secrets/prod.htpasswd"
@@ -281,6 +290,8 @@ fi
   echo "EODHD_AVAILABLE=${EODHD_AVAILABLE}"
   echo "IBKR_PAPER_AVAILABLE=${IBKR_PAPER_AVAILABLE}"
   echo "IBKR_LIVE_AVAILABLE=${IBKR_LIVE_AVAILABLE}"
+  echo "EODHD_UI_AVAILABLE=${EODHD_UI_AVAILABLE}"
+  echo "IBKR_UI_AVAILABLE=${IBKR_UI_AVAILABLE}"
 } >> "$TMP_ENV"
 
 if [ "$HAS_IBKR_PROFILE" = "1" ]; then

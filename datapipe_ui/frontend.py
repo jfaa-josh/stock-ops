@@ -58,6 +58,10 @@ if "TEST_MODE" not in st.session_state:
 
 TEST_MODE: bool = st.session_state.TEST_MODE
 
+EODHD_UI_AVAILABLE: bool = os.getenv("EODHD_UI_AVAILABLE", "false") == "true"
+IBKR_UI_AVAILABLE: bool = os.getenv("IBKR_UI_AVAILABLE", "false") == "true"
+IBKR_TRADING_MODE_LABEL: str = os.getenv("IBKR_TRADING_MODE", "paper")
+
 if "api" not in st.session_state:
     if TEST_MODE:
         st.session_state.api = make_api("controller_driver", True)
@@ -70,10 +74,9 @@ if "services" not in st.session_state:
     st.session_state.services = {
         "hist": DeploymentService(st.session_state.api, provider="EODHD", mode = "hist"),
         "stream": DeploymentService(st.session_state.api, provider="EODHD", mode = "stream"),
+        "hist_ibkr": DeploymentService(st.session_state.api, provider="IBKR", mode = "hist"),
+        "stream_ibkr": DeploymentService(st.session_state.api, provider="IBKR", mode = "stream"),
     }
-
-svc_hist = st.session_state.services["hist"]
-svc_stream = st.session_state.services["stream"]
 
 @dataclass
 class Section:
@@ -88,8 +91,8 @@ class Section:
     # ---- namespaced session state accessors ----
     @property
     def svc(self) -> DeploymentService:
-        # Route to the correct DeploymentService instance
-        return svc_hist if self.mode == "hist" else svc_stream
+        # Route to this Section's own DeploymentService instance
+        return st.session_state.services[self.ns]
 
     def __post_init__(self):
         self.cfg_key  = f"{self.ns}_deploy_configs"
@@ -762,11 +765,27 @@ class Section:
         self.render_rows()
         self.auto_poll()
 
-# === LAYOUT: two identical capabilities side-by-side ===
-left_col, right_col = st.columns([1, 1], gap="large")
+# === LAYOUT: one row per provider, hist|stream side-by-side within each ===
+if EODHD_UI_AVAILABLE:
+    st.subheader("EODHD")
+    eodhd_left, eodhd_right = st.columns([1, 1], gap="large")
 
-with left_col:
-    Section(ns="hist", title="➕ Add new EODHD historical‐fetch config", api=api, mode="hist", provider = "EODHD").render()
+    with eodhd_left:
+        Section(ns="hist", title="➕ Add new EODHD historical‐fetch config", api=api, mode="hist", provider="EODHD").render()
 
-with right_col:
-    Section(ns="stream", title="➕ Add new EODHD stream‐fetch config", api=api, mode="stream", provider = "EODHD").render()
+    with eodhd_right:
+        Section(ns="stream", title="➕ Add new EODHD stream‐fetch config", api=api, mode="stream", provider="EODHD").render()
+else:
+    st.caption("EODHD not available in this session — set EODHD_API_TOKEN in .env and start with --providers eodhd to enable it.")
+
+if IBKR_UI_AVAILABLE:
+    st.subheader(f"IBKR — trading mode: {IBKR_TRADING_MODE_LABEL.upper()}")
+    ibkr_left, ibkr_right = st.columns([1, 1], gap="large")
+
+    with ibkr_left:
+        Section(ns="hist_ibkr", title="➕ Add new IBKR historical‐fetch config", api=api, mode="hist", provider="IBKR").render()
+
+    with ibkr_right:
+        Section(ns="stream_ibkr", title="➕ Add new IBKR stream‐fetch config", api=api, mode="stream", provider="IBKR").render()
+else:
+    st.caption("IBKR not available in this session — start the stack with --providers ibkr_paper or ibkr_live to enable it.")

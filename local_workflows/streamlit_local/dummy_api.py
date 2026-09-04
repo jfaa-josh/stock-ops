@@ -25,7 +25,6 @@ class DummyAPIBackend:
         # in-memory stores
         self._flows: Dict[str, Dict[str, Any]] = {}
         self._deployments: Dict[str, Dict[str, Any]] = {}
-        self._schedules: Dict[str, Dict[str, Any]] = {}  # kept for compatibility; no longer authoritative
         self._flow_runs: Dict[str, Dict[str, Any]] = {}
 
         # register the controller flow, like the real backend does
@@ -171,11 +170,6 @@ class DummyAPIBackend:
         # ---- persist on the deployment so subsequent GETs see them ----
         dep["schedules"].extend(created_scheds)
 
-        # (legacy) keep _schedules mapping pointing to "last created" schedule for this deployment
-        # to preserve compatibility with any old code that referenced it
-        if created_scheds:
-            self._schedules[deployment_id] = created_scheds[-1]
-
         response: Dict[str, Any] = {
             "id": str(uuid.uuid4()),
             "created": now_iso,
@@ -300,8 +294,7 @@ class DummyAPIBackend:
             raise requests.exceptions.HTTPError(msg)
 
         # Remove schedules
-        removed_scheds = self._schedules.pop(deployment_id, [])
-        n_sched = len(removed_scheds)
+        n_sched = len(dep.get("schedules") or [])
 
         # Remove flow runs tied to this deployment
         to_delete_runs = [rid for rid, fr in self._flow_runs.items() if fr["deployment_id"] == deployment_id]

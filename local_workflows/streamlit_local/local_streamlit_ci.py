@@ -14,6 +14,9 @@ sys.path.insert(0, str(repo_root))
 script = repo_root / "datapipe_ui" / "frontend.py"
 
 os.environ["TEST_MODE"] = "1"
+os.environ["EODHD_UI_AVAILABLE"] = "true"
+os.environ["IBKR_UI_AVAILABLE"] = "true"
+os.environ["IBKR_TRADING_MODE"] = "paper"
 
 def main():
     def get_command(command_type: str) -> dict[str, Any]:
@@ -72,45 +75,45 @@ def main():
         return rid, idx
 
     # ---------- Specialized field-fillers kept tiny & isolated ----------
-    def set_stream_fields(exp, cmd: dict[str, Any], schedule_checkbox_key: str):
+    def set_stream_fields(exp, cmd: dict[str, Any], schedule_checkbox_key: str, prefix: str):
         exp = refresh_exp(at, i)
         exp.checkbox(schedule_checkbox_key).set_value(False).run()
         exp = refresh_exp(at, i)
 
-        exp.text_input("stream_new_ticker").set_value(cmd['tickers'])
-        exp.text_input("stream_new_exchange").set_value(cmd['exchange'])
-        exp.selectbox("stream_stream_type").set_value(cmd['stream_type'])
-        exp.text_input("stream_duration_text").set_value(str(cmd['duration']))
+        exp.text_input(f"{prefix}_new_ticker").set_value(cmd['tickers'])
+        exp.text_input(f"{prefix}_new_exchange").set_value(cmd['exchange'])
+        exp.selectbox(f"{prefix}_stream_type").set_value(cmd['stream_type'])
+        exp.text_input(f"{prefix}_duration_text").set_value(str(cmd['duration']))
         return exp
 
-    def set_hist_frequency(exp, command_type: str):
+    def set_hist_frequency(exp, command_type: str, prefix: str):
         # Two calls required to refresh interval options
-        exp.selectbox("hist_new_frequency").set_value('Intraday' if command_type == 'historical_intraday' else 'Interday').run()
+        exp.selectbox(f"{prefix}_new_frequency").set_value('Intraday' if command_type == 'historical_intraday' else 'Interday').run()
 
-    def set_hist_fields(exp, cmd: dict[str, Any], command_type: str, schedule_checkbox_key: str):
+    def set_hist_fields(exp, cmd: dict[str, Any], command_type: str, schedule_checkbox_key: str, prefix: str):
         # Frequency toggling to refresh interval choices
         exp = refresh_exp(at, i)
         exp.checkbox(schedule_checkbox_key).set_value(False).run()
         exp = refresh_exp(at, i)
 
-        set_hist_frequency(exp, command_type)
+        set_hist_frequency(exp, command_type, prefix)
         exp = refresh_exp(at, i)
 
-        set_hist_frequency(exp, command_type)
+        set_hist_frequency(exp, command_type, prefix)
         # Dates/times
         if command_type == 'historical_intraday':
             s_date, s_time = cmd['start'].split(' ')
             e_date, e_time = cmd['end'].split(' ')
-            exp.date_input(key='hist_new_start_date').set_value(date.fromisoformat(s_date))
-            exp.date_input(key='hist_new_end_date').set_value(date.fromisoformat(e_date))
-            exp.time_input(key='hist_new_start_time').set_value(time.fromisoformat(s_time))
-            exp.time_input(key='hist_new_end_time').set_value(time.fromisoformat(e_time))
+            exp.date_input(key=f'{prefix}_new_start_date').set_value(date.fromisoformat(s_date))
+            exp.date_input(key=f'{prefix}_new_end_date').set_value(date.fromisoformat(e_date))
+            exp.time_input(key=f'{prefix}_new_start_time').set_value(time.fromisoformat(s_time))
+            exp.time_input(key=f'{prefix}_new_end_time').set_value(time.fromisoformat(e_time))
         else:
-            exp.date_input(key='hist_new_start_date').set_value(date.fromisoformat(cmd['start']))
-            exp.date_input(key='hist_new_end_date').set_value(date.fromisoformat(cmd['end']))
-        exp.text_input("hist_new_ticker").set_value(cmd['ticker'])
-        exp.text_input("hist_new_exchange").set_value(cmd['exchange'])
-        exp.selectbox("hist_new_interval").set_value(cmd['interval'])
+            exp.date_input(key=f'{prefix}_new_start_date').set_value(date.fromisoformat(cmd['start']))
+            exp.date_input(key=f'{prefix}_new_end_date').set_value(date.fromisoformat(cmd['end']))
+        exp.text_input(f"{prefix}_new_ticker").set_value(cmd['ticker'])
+        exp.text_input(f"{prefix}_new_exchange").set_value(cmd['exchange'])
+        exp.selectbox(f"{prefix}_new_interval").set_value(cmd['interval'])
         return exp
 
     # ---------- Generic drive routines (major redundancy removal) ----------
@@ -125,10 +128,10 @@ def main():
         add_btn_key: str
     ):
         # No schedule
-        if prefix == 'hist':
-            exp = set_hist_fields(exp, cmd, command_type, schedule_checkbox_key)
-        elif prefix == 'stream':
-            exp = set_stream_fields(exp, cmd, schedule_checkbox_key)
+        if prefix.startswith('hist'):
+            exp = set_hist_fields(exp, cmd, command_type, schedule_checkbox_key, prefix)
+        elif prefix.startswith('stream'):
+            exp = set_stream_fields(exp, cmd, schedule_checkbox_key, prefix)
 
         if schedule_checkbox_key:
             exp.checkbox(schedule_checkbox_key).uncheck().run()
@@ -182,6 +185,38 @@ def main():
                         used_ids=used,
                         schedule_checkbox_key = schedule_checkbox_key,
                         add_btn_key="hist_add_cfg_btn",
+                    )
+
+            elif exp.label == '➕ Add new IBKR stream‐fetch config':
+                for command_type in ['stream_trades', 'stream_quotes']:
+                    used = []
+                    cmd = get_command(command_type)
+
+                    schedule_checkbox_key="stream_ibkr_use_schedule"
+                    run_add_trigger_delete_cycle(
+                        at=at,
+                        exp=exp,
+                        state_key='stream_ibkr_deploy_configs',
+                        prefix='stream_ibkr',
+                        used_ids=used,
+                        schedule_checkbox_key=schedule_checkbox_key,
+                        add_btn_key="stream_ibkr_add_cfg_btn",
+                    )
+
+            elif exp.label == '➕ Add new IBKR historical‐fetch config':
+                for command_type in ['historical_interday', 'historical_intraday']:
+                    used = []
+                    cmd = get_command(command_type)
+
+                    schedule_checkbox_key="hist_ibkr_use_schedule"
+                    run_add_trigger_delete_cycle(
+                        at=at,
+                        exp=exp,
+                        state_key='hist_ibkr_deploy_configs',
+                        prefix='hist_ibkr',
+                        used_ids=used,
+                        schedule_checkbox_key = schedule_checkbox_key,
+                        add_btn_key="hist_ibkr_add_cfg_btn",
                     )
 
         except Exception as e:

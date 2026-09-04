@@ -274,6 +274,9 @@ services:
       PREFECT_API_URL: http://prefect-server:4200/api   # Prefect API URL for Streamlit to trigger flows
       VERBOSE_LOGGING: "false"                        # Sets streamlit_ui code var to reduce logging ("true"/"false")
       PYTHONPATH: /app:/app/src                       # Override .env's ./src to allow relative imports for pytest
+      EODHD_UI_AVAILABLE: ${EODHD_UI_AVAILABLE:-false} # Gates the EODHD section in frontend.py — set by run/stockops.sh
+      IBKR_UI_AVAILABLE: ${IBKR_UI_AVAILABLE:-false}   # Gates the IBKR section in frontend.py — set by run/stockops.sh
+      IBKR_TRADING_MODE: ${IBKR_TRADING_MODE:-paper}   # Read-only mode label shown alongside the IBKR section
     command: streamlit run datapipe_ui/frontend.py      # Launch the Streamlit application
     restart: unless-stopped
 
@@ -407,6 +410,10 @@ services:
       TWS_USERID_PAPER: ${TWS_USERID_PAPER:-}           # unused by the image itself (never used here)
       TWS_PASSWORD_PAPER: ${TWS_PASSWORD_PAPER:-}
       TWS_ACCEPT_INCOMING: accept
+      EXISTING_SESSION_DETECTED_ACTION: primaryoverride   # headless single-instance: auto-terminate any stale/
+                                                           # conflicting session instead of hanging on IBC's
+                                                           # unhandled "existing session" dialog (default is
+                                                           # 'manual', which needs a human to click through it)
       TIME_ZONE: America/New_York                       # matches eodhd_config.EXCHANGE_METADATA["US"]["Timezone"]
       AUTO_RESTART_TIME: "2:00 AM"                       # must match ibkr_config.IBKR_GATEWAY_RESTART_LOCAL (Chunk 6) — Section 10.1
       READ_ONLY_API: "yes"                              # Gateway-level enforcement, both trading modes — Section 9.1
